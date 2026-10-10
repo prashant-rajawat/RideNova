@@ -29,6 +29,11 @@ interface BookingPageProps {
 // Preset popular places for quick testing & instant coordinate resolution
 const SUGGESTED_PLACES: LocationPoint[] = [
   {
+    address: 'Dream Aatman, Vadsar, Vadodara',
+    latitude: 22.2575,
+    longitude: 73.1812,
+  },
+  {
     address: 'KPGU, Gandhinagar',
     latitude: 23.2156,
     longitude: 72.6369,
@@ -88,6 +93,9 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
   const [selectedRideType, setSelectedRideType] = useState<VehicleType>('economy');
   const [distanceKm, setDistanceKm] = useState<number | null>(null);
   const [durationMinutes, setDurationMinutes] = useState<number | null>(null);
+  const [isRealRoute, setIsRealRoute] = useState<boolean>(false);
+  const [isRouteLoading, setIsRouteLoading] = useState<boolean>(false);
+  const [routeError, setRouteError] = useState<string | null>(null);
 
   // Status & Confirmation States
   const [isLocating, setIsLocating] = useState(false);
@@ -145,6 +153,9 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
     if (!pickup || !destination) {
       setDistanceKm(null);
       setDurationMinutes(null);
+      setIsRealRoute(false);
+      setIsRouteLoading(false);
+      setRouteError(null);
       return;
     }
 
@@ -167,8 +178,12 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
     const computedDist = Math.max(0.5, Number(totalDist.toFixed(1)));
     const computedDur = estimateDurationMinutes(computedDist);
 
+    // Initial estimation while Google Maps calculates the authoritative route
     setDistanceKm(computedDist);
     setDurationMinutes(computedDur);
+    setIsRealRoute(false);
+    setIsRouteLoading(true);
+    setRouteError(null);
   }, [pickup, destination, stops]);
 
   // Current Location Handler
@@ -225,6 +240,22 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
     const updated = stops
       .filter((s) => s.stopOrder !== order)
       .map((s, idx) => ({ ...s, stopOrder: idx + 1 }));
+    setStops(updated);
+  };
+
+  // Reorder intermediate stop (move up or down)
+  const handleMoveStop = (order: number, direction: 'up' | 'down') => {
+    const sorted = [...stops].sort((a, b) => a.stopOrder - b.stopOrder);
+    const index = sorted.findIndex((s) => s.stopOrder === order);
+    if (index === -1) return;
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= sorted.length) return;
+
+    const temp = sorted[index];
+    sorted[index] = sorted[targetIndex];
+    sorted[targetIndex] = temp;
+
+    const updated = sorted.map((s, idx) => ({ ...s, stopOrder: idx + 1 }));
     setStops(updated);
   };
 
@@ -461,9 +492,18 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
 
           {/* Geolocation Notice / Error */}
           {locationError && (
-            <div className="rounded-lg border border-[#F59E0B]/30 bg-[#F59E0B]/10 p-3 text-xs text-[#F59E0B] flex items-start gap-2">
-              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-              <span>{locationError}</span>
+            <div className="rounded-lg border border-[#F59E0B]/30 bg-[#F59E0B]/10 p-3 text-xs text-[#F59E0B] flex items-start justify-between gap-2">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-[#F59E0B]" />
+                <span>{locationError}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLocationError(null)}
+                className="text-[11px] underline text-[#F59E0B] hover:text-[#FBBF24] shrink-0 cursor-pointer"
+              >
+                Dismiss
+              </button>
             </div>
           )}
 
@@ -578,14 +618,38 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
                     </span>
                     Stop {stop.stopOrder}
                   </label>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveStop(stop.stopOrder)}
-                    className="flex items-center gap-1 text-[11px] text-[#EF4444] hover:underline"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                    <span>Remove</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {stops.length > 1 && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleMoveStop(stop.stopOrder, 'up')}
+                          disabled={stop.stopOrder === 1}
+                          className="px-1.5 py-0.5 rounded text-[10px] bg-[#1E334D] text-[#8FA6BF] hover:text-[#E5F2FF] hover:bg-[#1E334D]/80 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                          title="Move stop up"
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleMoveStop(stop.stopOrder, 'down')}
+                          disabled={stop.stopOrder === stops.length}
+                          className="px-1.5 py-0.5 rounded text-[10px] bg-[#1E334D] text-[#8FA6BF] hover:text-[#E5F2FF] hover:bg-[#1E334D]/80 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                          title="Move stop down"
+                        >
+                          ↓
+                        </button>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveStop(stop.stopOrder)}
+                      className="flex items-center gap-1 text-[11px] text-[#EF4444] hover:underline"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      <span>Remove</span>
+                    </button>
+                  </div>
                 </div>
 
                 <div className="relative">
@@ -719,6 +783,48 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
             </div>
           </div>
 
+          {/* Route Metrics Status Pill */}
+          {(distanceKm !== null && durationMinutes !== null) || isRouteLoading ? (
+            <div className="pt-2">
+              <div className="flex items-center justify-between p-2.5 rounded-lg border border-[#1E334D] bg-[#07111F] text-xs">
+                <div className="flex items-center gap-2">
+                  <Navigation className="h-4 w-4 text-[#00C2FF]" />
+                  {distanceKm !== null && durationMinutes !== null ? (
+                    <span className="text-[#E5F2FF] font-semibold">
+                      {distanceKm} km · {durationMinutes} min
+                    </span>
+                  ) : (
+                    <span className="text-[#8FA6BF]">Calculating distance...</span>
+                  )}
+                </div>
+
+                {isRouteLoading ? (
+                  <span className="flex items-center gap-1.5 text-[11px] text-[#00C2FF] font-medium">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Calculating...
+                  </span>
+                ) : isRealRoute ? (
+                  <span className="flex items-center gap-1 text-[11px] text-[#22C55E] font-medium">
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                    Real Google Route
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-[11px] text-[#F59E0B] font-medium">
+                    <Info className="h-3.5 w-3.5" />
+                    Coordinate Estimate
+                  </span>
+                )}
+              </div>
+
+              {routeError && !isRouteLoading && (
+                <div className="mt-1.5 rounded-lg border border-[#EF4444]/30 bg-[#EF4444]/10 p-2 text-[11px] text-[#FCA5A5] flex items-start gap-1.5">
+                  <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-[#EF4444]" />
+                  <span>{routeError}</span>
+                </div>
+              )}
+            </div>
+          ) : null}
+
           {/* Ride Type Selection (Economy, Comfort, Premium) */}
           <div className="pt-4 border-t border-[#1E334D] space-y-3">
             <span className="text-xs font-bold text-[#E5F2FF] block">
@@ -832,9 +938,26 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
             stops={stops}
             distanceKm={distanceKm}
             durationMinutes={durationMinutes}
-            onRealRouteCalculated={(realKm, realDur) => {
-              setDistanceKm(realKm);
-              setDurationMinutes(realDur);
+            isRealRoute={isRealRoute}
+            isRouteLoading={isRouteLoading}
+            routeError={routeError}
+            onRouteStartCalculating={() => {
+              setIsRouteLoading(true);
+              setRouteError(null);
+            }}
+            onRealRouteCalculated={(realKm, realDur, isReal) => {
+              if (isReal && realKm > 0) {
+                setDistanceKm(realKm);
+                setDurationMinutes(realDur);
+                setIsRealRoute(true);
+              }
+              setIsRouteLoading(false);
+              setRouteError(null);
+            }}
+            onRouteCalculationError={(err) => {
+              setIsRouteLoading(false);
+              setRouteError(err);
+              setIsRealRoute(false);
             }}
           />
         </div>

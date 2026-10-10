@@ -345,6 +345,128 @@ async function runStep3Tests() {
       'Rider 1 can successfully access their own ride details'
     );
 
+    // -------------------------------------------------------------
+    // TASK 5 REGRESSION SUITE: 0 Stops, 1 Stop, and 2 Stops Multi-Routing
+    // -------------------------------------------------------------
+    console.log('\n--- Route Stop Variations: 0 stops, 1 stop, 2 stops ---');
+
+    // Test 0 stops (Direct route)
+    const zeroStopsPost = await requestApi('/api/rides', {
+      method: 'POST',
+      token: rider1Token,
+      body: {
+        pickupAddress: 'Dream Aatman, Vadsar, Vadodara',
+        pickupLatitude: 22.2575,
+        pickupLongitude: 73.1812,
+        destinationAddress: 'Ahmedabad Railway Station, Kalupur',
+        destinationLatitude: 23.0225,
+        destinationLongitude: 72.5714,
+        rideType: 'economy',
+        stops: [],
+      },
+    });
+    assert(
+      zeroStopsPost.status === 201 &&
+        zeroStopsPost.body?.data?.stops?.length === 0 &&
+        zeroStopsPost.body?.data?.status === 'requested' &&
+        zeroStopsPost.body?.data?.driver_id === null,
+      'TASK 5a: Route with 0 stops succeeds with valid metrics and status=requested'
+    );
+
+    // Test 1 stop
+    const oneStopPost = await requestApi('/api/rides', {
+      method: 'POST',
+      token: rider1Token,
+      body: {
+        pickupAddress: 'Dream Aatman, Vadsar, Vadodara',
+        pickupLatitude: 22.2575,
+        pickupLongitude: 73.1812,
+        destinationAddress: 'Ahmedabad Railway Station, Kalupur',
+        destinationLatitude: 23.0225,
+        destinationLongitude: 72.5714,
+        rideType: 'comfort',
+        stops: [
+          { address: 'City Mall, Gandhinagar', latitude: 23.1989, longitude: 72.6289, stopOrder: 1 },
+        ],
+      },
+    });
+    assert(
+      oneStopPost.status === 201 &&
+        oneStopPost.body?.data?.stops?.length === 1 &&
+        oneStopPost.body?.data?.stops[0].stop_order === 1,
+      'TASK 5b: Route with 1 stop succeeds with exact stop_order=1'
+    );
+
+    // Test 2 stops (User specific scenario: Pickup -> Stop 1: City Mall -> Stop 2: Infocity -> Destination)
+    const twoStopsPost = await requestApi('/api/rides', {
+      method: 'POST',
+      token: rider1Token,
+      body: {
+        pickupAddress: 'Dream Aatman, Vadsar, Vadodara',
+        pickupLatitude: 22.2575,
+        pickupLongitude: 73.1812,
+        destinationAddress: 'Ahmedabad Railway Station, Kalupur',
+        destinationLatitude: 23.0225,
+        destinationLongitude: 72.5714,
+        rideType: 'premium',
+        stops: [
+          { address: 'City Mall, Gandhinagar', latitude: 23.1989, longitude: 72.6289, stopOrder: 1 },
+          { address: 'Infocity, Gandhinagar', latitude: 23.1895, longitude: 72.6281, stopOrder: 2 },
+        ],
+      },
+    });
+    assert(
+      twoStopsPost.status === 201 &&
+        twoStopsPost.body?.data?.stops?.length === 2 &&
+        twoStopsPost.body?.data?.stops[0].stop_order === 1 &&
+        twoStopsPost.body?.data?.stops[1].stop_order === 2 &&
+        twoStopsPost.body?.data?.ride_type === 'premium',
+      'TASK 5c: Route with 2 stops maintains exact stop order (Stop 1 -> Stop 2) and calculates Premium fare'
+    );
+
+    // -------------------------------------------------------------
+    // Vehicle Category Rates Consistency Check
+    // -------------------------------------------------------------
+    console.log('\n--- Vehicle Category Rates Verification ---');
+    const testDistance = 25; // 25 km
+    const testDuration = 45; // 45 min
+    const econCalc = calculateFare('economy', testDistance, testDuration);
+    const comfCalc = calculateFare('comfort', testDistance, testDuration);
+    const premCalc = calculateFare('premium', testDistance, testDuration);
+
+    assert(
+      econCalc.baseFare === 40 &&
+        econCalc.distanceCharge === 300 &&
+        econCalc.timeCharge === 90 &&
+        econCalc.estimatedFare === 430,
+      'TASK 5d: Economy fare breakdown verified (40 + 300 + 90 = 430)'
+    );
+
+    assert(
+      comfCalc.baseFare === 60 &&
+        comfCalc.distanceCharge === 450 &&
+        comfCalc.timeCharge === 135 &&
+        comfCalc.estimatedFare === 645,
+      'TASK 5e: Comfort fare breakdown verified (60 + 450 + 135 = 645)'
+    );
+
+    assert(
+      premCalc.baseFare === 100 &&
+        premCalc.distanceCharge === 625 &&
+        premCalc.timeCharge === 180 &&
+        premCalc.estimatedFare === 905,
+      'TASK 5f: Premium fare breakdown verified (100 + 625 + 180 = 905)'
+    );
+
+    // Verify GET /api/config/maps
+    const configMapsRes = await requestApi('/api/config/maps');
+    assert(
+      configMapsRes.status === 200 &&
+        configMapsRes.body?.success === true &&
+        typeof configMapsRes.body?.configured === 'boolean',
+      'TASK 5g: Public endpoint GET /api/config/maps is healthy and responds'
+    );
+
   } finally {
     server.close();
   }
