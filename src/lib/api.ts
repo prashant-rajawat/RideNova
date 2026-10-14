@@ -8,6 +8,10 @@ import {
   RideApiResponse,
   RidesListApiResponse,
   RideWithStops,
+  DriverProfile,
+  Vehicle,
+  AvailableRideSummary,
+  RideStatus,
 } from '../types/index.ts';
 
 const API_BASE_URL =
@@ -177,6 +181,31 @@ export const api = {
   },
 
   /**
+   * Authoritative route preview and fare calculation: POST /api/rides/route
+   */
+  async previewRoute(payload: {
+    pickup: { latitude: number; longitude: number; address?: string };
+    destination: { latitude: number; longitude: number; address?: string };
+    stops?: Array<{ latitude: number; longitude: number; stopOrder: number; address?: string }>;
+  }): Promise<{
+    success: boolean;
+    data: {
+      distanceKm: number;
+      durationMinutes: number;
+      routeSource: 'google_routes_api' | 'fallback_estimate';
+      isGoogleRoute: boolean;
+      encodedPolyline?: string | null;
+      fares: Record<string, any>;
+    };
+  }> {
+    return request('/rides/route', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
    * Create a new ride request: POST /api/rides
    */
   async createRide(payload: CreateRidePayload): Promise<RideApiResponse> {
@@ -199,5 +228,180 @@ export const api = {
    */
   async getRides(): Promise<RidesListApiResponse> {
     return request<RidesListApiResponse>('/rides');
+  },
+
+  /**
+   * Driver: Get complete driver profile & vehicle: GET /api/driver/me
+   */
+  async getDriverProfile(): Promise<{ success: boolean; data: DriverProfile }> {
+    return request<{ success: boolean; data: DriverProfile }>('/driver/me');
+  },
+
+  /**
+   * Driver: Update profile details: PATCH /api/driver/profile
+   */
+  async updateDriverProfile(data: {
+    name?: string;
+    phone?: string;
+    licenseNumber?: string;
+  }): Promise<{ success: boolean; data: DriverProfile }> {
+    return request<{ success: boolean; data: DriverProfile }>('/driver/profile', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  },
+
+  /**
+   * Driver: Get vehicle details: GET /api/driver/vehicle
+   */
+  async getDriverVehicle(): Promise<{ success: boolean; data: Vehicle | null }> {
+    return request<{ success: boolean; data: Vehicle | null }>('/driver/vehicle');
+  },
+
+  /**
+   * Driver: Register/update vehicle: POST /api/driver/vehicle
+   */
+  async updateDriverVehicle(data: {
+    vehicleType: 'economy' | 'comfort' | 'premium';
+    make: string;
+    model: string;
+    color: string;
+    registrationNumber: string;
+    year: number;
+  }): Promise<{ success: boolean; message: string; data: Vehicle }> {
+    return request<{ success: boolean; message: string; data: Vehicle }>('/driver/vehicle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  },
+
+  /**
+   * Driver: Toggle online/offline availability: PATCH /api/driver/availability
+   */
+  async setDriverAvailability(data: {
+    isOnline: boolean;
+    latitude?: number;
+    longitude?: number;
+  }): Promise<{
+    success: boolean;
+    message: string;
+    data: {
+      isOnline: boolean;
+      status: string;
+      currentLatitude: number | null;
+      currentLongitude: number | null;
+    };
+  }> {
+    return request<{
+      success: boolean;
+      message: string;
+      data: {
+        isOnline: boolean;
+        status: string;
+        currentLatitude: number | null;
+        currentLongitude: number | null;
+      };
+    }>('/driver/availability', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  },
+
+  /**
+   * Driver: Update live GPS location: PATCH /api/driver/location
+   */
+  async updateDriverLocation(latitude: number, longitude: number): Promise<{ success: boolean; data: any }> {
+    return request('/driver/location', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ latitude, longitude }),
+    });
+  },
+
+  /**
+   * Driver: Get available ride requests: GET /api/driver/requests
+   */
+  async getDriverRequests(excludeIds: string[] = []): Promise<{
+    success: boolean;
+    data: AvailableRideSummary[];
+    count: number;
+  }> {
+    const queryStr = excludeIds.length > 0 ? `?exclude=${encodeURIComponent(excludeIds.join(','))}` : '';
+    return request<{
+      success: boolean;
+      data: AvailableRideSummary[];
+      count: number;
+    }>(`/driver/requests${queryStr}`);
+  },
+
+  /**
+   * Driver: Secure atomic ride acceptance: POST /api/rides/:id/accept
+   */
+  async acceptRide(rideId: string): Promise<{
+    success: boolean;
+    message: string;
+    data: RideWithStops;
+  }> {
+    return request<{
+      success: boolean;
+      message: string;
+      data: RideWithStops;
+    }>(`/rides/${rideId}/accept`, {
+      method: 'POST',
+    });
+  },
+
+  /**
+   * Driver: Get active ride: GET /api/driver/active-ride
+   */
+  async getDriverActiveRide(): Promise<{
+    success: boolean;
+    data: RideWithStops | null;
+  }> {
+    return request<{
+      success: boolean;
+      data: RideWithStops | null;
+    }>('/driver/active-ride');
+  },
+
+  /**
+   * Driver: Update ride status: PATCH /api/driver/rides/:id/status
+   */
+  async updateRideStatus(
+    rideId: string,
+    status: RideStatus,
+    cancellationReason?: string
+  ): Promise<{
+    success: boolean;
+    message: string;
+    data: RideWithStops;
+  }> {
+    return request<{
+      success: boolean;
+      message: string;
+      data: RideWithStops;
+    }>(`/driver/rides/${rideId}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status, cancellationReason }),
+    });
+  },
+
+  /**
+   * Driver: Get driver ride history: GET /api/driver/history
+   */
+  async getDriverHistory(): Promise<{
+    success: boolean;
+    data: RideWithStops[];
+    count: number;
+  }> {
+    return request<{
+      success: boolean;
+      data: RideWithStops[];
+      count: number;
+    }>('/driver/history');
   },
 };

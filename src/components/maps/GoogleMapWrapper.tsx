@@ -1,14 +1,15 @@
-import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import {
   APIProvider,
   Map as GoogleMap,
   AdvancedMarker,
   useMap,
-  useMapsLibrary,
   useApiLoadingStatus,
   APILoadingStatus,
 } from '@vis.gl/react-google-maps';
-import { MapPin, AlertCircle, Info, Navigation, ExternalLink, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { MapPin, AlertCircle, Info, Navigation, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { RouteSource } from '../../types/index.ts';
+import { api } from '../../lib/api.ts';
 
 export interface LocationPoint {
   address: string;
@@ -28,12 +29,17 @@ interface GoogleMapWrapperProps {
   durationMinutes: number | null;
   className?: string;
   isRealRoute?: boolean;
+  routeSource?: RouteSource | null;
   isRouteLoading?: boolean;
   routeError?: string | null;
   onRouteStartCalculating?: () => void;
-  onRealRouteCalculated?: (distKm: number, durMin: number, isRealRoute?: boolean) => void;
+  onRealRouteCalculated?: (distKm: number, durMin: number, isRealRoute?: boolean, routeSource?: RouteSource) => void;
   onRouteCalculationError?: (error: string) => void;
 }
+
+// Stable static references required by @vis.gl/react-google-maps to prevent re-mount loops
+const GOOGLE_MAPS_LIBRARIES: ('routes' | 'places' | 'marker')[] = ['routes', 'places', 'marker'];
+const INTERNAL_ATTRIBUTION_IDS: string[] = ['gmp_mcp_codeassist_v1_aistudio'];
 
 // Dark style theme for Google Maps to match RideNova #07111F
 const DARK_MAP_STYLES = [
@@ -112,35 +118,76 @@ const MapBoundsAdjuster: React.FC<{
   points: { lat: number; lng: number }[];
 }> = ({ points }) => {
   const map = useMap();
+  const pointsKey = useMemo(
+    () => points.map((p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join(';'),
+    [points]
+  );
 
   useEffect(() => {
-    if (!map || points.length === 0) return;
-
-    if (points.length === 1) {
-      map.setCenter(points[0]);
-      map.setZoom(15);
+    if (!map || points.length === 0 || typeof window === 'undefined' || !(window as any).google?.maps?.LatLngBounds) {
       return;
     }
 
-    const bounds = new google.maps.LatLngBounds();
+    if (points.length === 1) {
+      map.setCenter(points[0]);
+      map.setZoom(14);
+      return;
+    }
+
+    const bounds = new (window as any).google.maps.LatLngBounds();
     points.forEach((pt) => bounds.extend(pt));
     map.fitBounds(bounds, { top: 60, right: 60, bottom: 60, left: 60 });
-  }, [map, points]);
+  }, [map, pointsKey]);
 
   return null;
 };
 
 /**
+ * Decodes Google encoded polyline string into array of {lat, lng} coordinates
+ */
+function decodePolylinePoints(encoded: string): Array<{ lat: number; lng: number }> {
+  const points: Array<{ lat: number; lng: number }> = [];
+  let index = 0;
+  const len = encoded.length;
+  let lat = 0;
+  let lng = 0;
+  while (index < len) {
+    let b: number;
+    let shift = 0;
+    let result = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    const dlat = (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
+    lat += dlat;
+    shift = 0;
+    result = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    const dlng = (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
+    lng += dlng;
+    points.push({ lat: lat / 1e5, lng: lng / 1e5 });
+  }
+  return points;
+}
+
+/**
  * Modern Google Maps Routes & Directions API renderer.
  * Strictly calculates and visualizes driving routes in exact sequential order:
  * Origin (Pickup) -> Stop 1 -> Stop 2 -> ... -> Destination
+ * Prioritizes real Google Routes API and honestly falls back when unavailable.
  */
 const RealRoutesRenderer: React.FC<{
   origin: { lat: number; lng: number };
   destination: { lat: number; lng: number };
   intermediates: { lat: number; lng: number }[];
   onRouteStartCalculating?: () => void;
-  onRouteCalculated?: (distKm: number, durMin: number, isRealRoute?: boolean) => void;
+  onRouteCalculated?: (distKm: number, durMin: number, isRealRoute?: boolean, routeSource?: RouteSource) => void;
   onRouteError?: (err: string) => void;
 }> = ({
   origin,
@@ -151,191 +198,162 @@ const RealRoutesRenderer: React.FC<{
   onRouteError,
 }) => {
   const map = useMap();
-  const routesLib = useMapsLibrary('routes');
-  const polylineRef = useRef<google.maps.Polyline | null>(null);
+  const activeRequestIdRef = useRef(0);
+  const realPolylineRef = useRef<google.maps.Polyline | null>(null);
+  const fallbackPolylineRef = useRef<google.maps.Polyline | null>(null);
+
+  // Keep latest callback references in refs to decouple from effect dependencies
+  const onRouteStartCalculatingRef = useRef(onRouteStartCalculating);
+  onRouteStartCalculatingRef.current = onRouteStartCalculating;
+  const onRouteCalculatedRef = useRef(onRouteCalculated);
+  onRouteCalculatedRef.current = onRouteCalculated;
+  const onRouteErrorRef = useRef(onRouteError);
+  onRouteErrorRef.current = onRouteError;
+
+  // Compute a serialized route signature based on actual coordinates
+  const routeSignature = useMemo(() => {
+    if (!origin || !destination) return '';
+    const parts = [
+      `${origin.lat.toFixed(5)},${origin.lng.toFixed(5)}`,
+      ...intermediates.map((pt) => `${pt.lat.toFixed(5)},${pt.lng.toFixed(5)}`),
+      `${destination.lat.toFixed(5)},${destination.lng.toFixed(5)}`,
+    ];
+    return parts.join('|');
+  }, [origin?.lat, origin?.lng, destination?.lat, destination?.lng, intermediates]);
 
   useEffect(() => {
-    if (!map) return;
+    if (!map || !routeSignature) return;
 
-    onRouteStartCalculating?.();
+    // Validate that all coordinates are finite numbers
+    if (
+      !Number.isFinite(origin.lat) ||
+      !Number.isFinite(origin.lng) ||
+      !Number.isFinite(destination.lat) ||
+      !Number.isFinite(destination.lng) ||
+      intermediates.some((pt) => !Number.isFinite(pt.lat) || !Number.isFinite(pt.lng))
+    ) {
+      return;
+    }
 
-    // Fallback straight-line path
-    const fallbackPoints = [origin, ...intermediates, destination];
+    const requestId = ++activeRequestIdRef.current;
+    let isCancelled = false;
 
-    const renderDirectPolyline = () => {
-      if (!polylineRef.current) {
-        polylineRef.current = new google.maps.Polyline({
+    const renderDirectFallbackPolyline = () => {
+      if (realPolylineRef.current) {
+        realPolylineRef.current.setMap(null);
+        realPolylineRef.current = null;
+      }
+      const fallbackPoints = [origin, ...intermediates, destination];
+      if (fallbackPolylineRef.current) {
+        fallbackPolylineRef.current.setPath(fallbackPoints);
+        fallbackPolylineRef.current.setMap(map);
+      } else if (typeof window !== 'undefined' && (window as any).google?.maps?.Polyline) {
+        fallbackPolylineRef.current = new (window as any).google.maps.Polyline({
           path: fallbackPoints,
           geodesic: true,
           strokeColor: '#00C2FF',
-          strokeOpacity: 0.9,
+          strokeOpacity: 0.85,
           strokeWeight: 4,
           map,
         });
-      } else {
-        polylineRef.current.setPath(fallbackPoints);
-        polylineRef.current.setMap(map);
       }
     };
 
-    // 1. Preferred Production Path: google.maps.DirectionsService
-    if (typeof window !== 'undefined' && (window as any).google?.maps?.DirectionsService) {
+    // Debounce slightly to batch fast sequential updates and prevent render cascades
+    const timer = setTimeout(async () => {
+      if (isCancelled) return;
+
+      onRouteStartCalculatingRef.current?.();
+
       try {
-        const directionsService = new (window as any).google.maps.DirectionsService();
-        directionsService.route(
-          {
-            origin: new (window as any).google.maps.LatLng(origin.lat, origin.lng),
-            destination: new (window as any).google.maps.LatLng(destination.lat, destination.lng),
-            waypoints: intermediates.map((pt) => ({
-              location: new (window as any).google.maps.LatLng(pt.lat, pt.lng),
-              stopover: true,
-            })),
-            optimizeWaypoints: false, // MANDATORY: Preserves strict sequential stop order
-            travelMode: (window as any).google.maps.TravelMode.DRIVING,
-          },
-          (result: any, status: any) => {
-            if (status === 'OK' && result?.routes?.[0]) {
-              const primaryRoute = result.routes[0];
-
-              // High-resolution road polyline
-              const overviewPath = primaryRoute.overview_path;
-              if (polylineRef.current) {
-                polylineRef.current.setPath(overviewPath);
-                polylineRef.current.setMap(map);
-              } else {
-                polylineRef.current = new (window as any).google.maps.Polyline({
-                  path: overviewPath,
-                  geodesic: true,
-                  strokeColor: '#00C2FF',
-                  strokeOpacity: 0.9,
-                  strokeWeight: 4,
-                  map,
-                });
-              }
-
-              // Fit bounds with comfortable padding so no markers are obscured
-              if (primaryRoute.bounds) {
-                map.fitBounds(primaryRoute.bounds, { top: 70, right: 70, bottom: 70, left: 70 });
-              }
-
-              // Calculate exact distance & duration summed over all legs
-              let totalMeters = 0;
-              let totalSeconds = 0;
-              if (Array.isArray(primaryRoute.legs)) {
-                for (const leg of primaryRoute.legs) {
-                  totalMeters += leg?.distance?.value || 0;
-                  totalSeconds += leg?.duration?.value || 0;
-                }
-              }
-
-              const km = Number((totalMeters / 1000).toFixed(1));
-              const mins = Math.max(1, Math.round(totalSeconds / 60));
-
-              onRouteCalculated?.(km, mins, true);
-              return;
-            }
-
-            // If Directions status was not OK, render fallback and report error
-            renderDirectPolyline();
-            onRouteError?.(`Directions failed (${status || 'UNKNOWN'}). Using fallback.`);
-            onRouteCalculated?.(0, 0, false);
-          }
-        );
-
-        return () => {
-          if (polylineRef.current) {
-            polylineRef.current.setMap(null);
-          }
-        };
-      } catch (err: any) {
-        console.warn('DirectionsService route execution failed:', err);
-      }
-    }
-
-    // 2. Alternative Modern Routes API (Route.computeRoutes) if available
-    if (routesLib && (routesLib as any).Route) {
-      try {
-        const routeService = new (routesLib as any).Route();
-        const request: any = {
-          origin: { lat: origin.lat, lng: origin.lng },
-          destination: { lat: destination.lat, lng: destination.lng },
-          travelMode: (routesLib as any).TravelMode?.DRIVING || 'DRIVING',
-          intermediates: intermediates.map((pt) => ({
-            location: { latLng: { latitude: pt.lat, longitude: pt.lng } },
+        // 1. Primary: Request authoritative Google Routes API computeRoutes from backend
+        const res = await api.previewRoute({
+          pickup: { latitude: origin.lat, longitude: origin.lng },
+          destination: { latitude: destination.lat, longitude: destination.lng },
+          stops: intermediates.map((pt, idx) => ({
+            latitude: pt.lat,
+            longitude: pt.lng,
+            stopOrder: idx + 1,
           })),
-          fields: ['polyline', 'distanceMeters', 'duration', 'viewport'],
-        };
+        });
 
-        routeService
-          .computeRoutes(request)
-          .then((response: any) => {
-            if (response?.routes && response.routes.length > 0) {
-              const primaryRoute = response.routes[0];
+        if (isCancelled || requestId !== activeRequestIdRef.current) return;
 
-              if (primaryRoute.polyline?.encodedPolyline && (routesLib as any).Route?.decode) {
-                const decodedPath = (routesLib as any).Route.decode(
-                  primaryRoute.polyline.encodedPolyline
-                );
-                if (polylineRef.current) {
-                  polylineRef.current.setPath(decodedPath);
-                  polylineRef.current.setMap(map);
-                } else {
-                  polylineRef.current = new (window as any).google.maps.Polyline({
-                    path: decodedPath,
-                    geodesic: true,
-                    strokeColor: '#00C2FF',
-                    strokeOpacity: 0.9,
-                    strokeWeight: 4,
-                    map,
-                  });
-                }
-              } else {
-                renderDirectPolyline();
-              }
+        if (res.success && res.data) {
+          const routeData = res.data;
 
-              if (primaryRoute.viewport) {
-                const bounds = new (window as any).google.maps.LatLngBounds(
-                  primaryRoute.viewport.southwest,
-                  primaryRoute.viewport.northeast
-                );
-                map.fitBounds(bounds, { top: 70, right: 70, bottom: 70, left: 70 });
-              }
-
-              if (primaryRoute.distanceMeters && onRouteCalculated) {
-                const km = Number((primaryRoute.distanceMeters / 1000).toFixed(1));
-                let mins = 1;
-                if (typeof primaryRoute.duration === 'string') {
-                  const sMatch = primaryRoute.duration.match(/(\d+)s/);
-                  if (sMatch) mins = Math.max(1, Math.round(parseInt(sMatch[1], 10) / 60));
-                } else if (typeof primaryRoute.duration === 'number') {
-                  mins = Math.max(1, Math.round(primaryRoute.duration / 60));
-                }
-                onRouteCalculated(km, mins, true);
-              }
-            } else {
-              renderDirectPolyline();
-              onRouteError?.('Routes API returned empty route.');
-              onRouteCalculated?.(0, 0, false);
+          if (routeData.isGoogleRoute && routeData.encodedPolyline) {
+            // Clean up fallback polyline
+            if (fallbackPolylineRef.current) {
+              fallbackPolylineRef.current.setMap(null);
+              fallbackPolylineRef.current = null;
             }
-          })
-          .catch((err: any) => {
-            renderDirectPolyline();
-            onRouteError?.(`Routes API error: ${err?.message || 'unknown'}`);
-            onRouteCalculated?.(0, 0, false);
-          });
-      } catch {
-        renderDirectPolyline();
+
+            const decodedPoints = decodePolylinePoints(routeData.encodedPolyline);
+
+            if (!realPolylineRef.current && typeof window !== 'undefined' && (window as any).google?.maps?.Polyline) {
+              realPolylineRef.current = new (window as any).google.maps.Polyline({
+                path: decodedPoints,
+                geodesic: true,
+                strokeColor: '#00C2FF',
+                strokeOpacity: 0.95,
+                strokeWeight: 5,
+                map,
+              });
+            } else if (realPolylineRef.current) {
+              realPolylineRef.current.setPath(decodedPoints);
+              realPolylineRef.current.setMap(map);
+            }
+
+            // Fit map bounds to encompass the complete route path
+            if (decodedPoints.length > 0 && typeof window !== 'undefined' && (window as any).google?.maps?.LatLngBounds) {
+              const bounds = new (window as any).google.maps.LatLngBounds();
+              for (const pt of decodedPoints) {
+                bounds.extend(new (window as any).google.maps.LatLng(pt.lat, pt.lng));
+              }
+              map.fitBounds(bounds, { top: 70, right: 70, bottom: 70, left: 70 });
+            }
+
+            onRouteCalculatedRef.current?.(
+              routeData.distanceKm,
+              routeData.durationMinutes,
+              true,
+              routeData.routeSource
+            );
+            return;
+          } else {
+            // Fallback estimation returned by backend
+            renderDirectFallbackPolyline();
+            onRouteCalculatedRef.current?.(
+              routeData.distanceKm,
+              routeData.durationMinutes,
+              false,
+              'fallback_estimate'
+            );
+            return;
+          }
+        }
+      } catch (err: any) {
+        if (isCancelled || requestId !== activeRequestIdRef.current) return;
+        renderDirectFallbackPolyline();
+        onRouteErrorRef.current?.(err.message || 'Google routing unavailable. Showing coordinate estimate.');
+        onRouteCalculatedRef.current?.(0, 0, false, 'fallback_estimate');
       }
-    } else {
-      renderDirectPolyline();
-    }
+    }, 150);
 
     return () => {
-      if (polylineRef.current) {
-        polylineRef.current.setMap(null);
+      isCancelled = true;
+      clearTimeout(timer);
+      if (realPolylineRef.current) {
+        realPolylineRef.current.setMap(null);
+        realPolylineRef.current = null;
+      }
+      if (fallbackPolylineRef.current) {
+        fallbackPolylineRef.current.setMap(null);
+        fallbackPolylineRef.current = null;
       }
     };
-  }, [map, routesLib, origin, destination, intermediates, onRouteCalculated, onRouteStartCalculating, onRouteError]);
+  }, [map, routeSignature]);
 
   return null;
 };
@@ -361,6 +379,7 @@ export const GoogleMapWrapper: React.FC<GoogleMapWrapperProps> = ({
   durationMinutes,
   className = '',
   isRealRoute = false,
+  routeSource = null,
   isRouteLoading = false,
   routeError = null,
   onRouteStartCalculating,
@@ -414,7 +433,7 @@ export const GoogleMapWrapper: React.FC<GoogleMapWrapperProps> = ({
   // Compute all points in sequential order: Pickup -> Stops (by order) -> Destination
   const waypoints = useMemo(() => {
     const list: { lat: number; lng: number; label: string; title: string; color: string }[] = [];
-    if (pickup) {
+    if (pickup && Number.isFinite(pickup.latitude) && Number.isFinite(pickup.longitude)) {
       list.push({
         lat: pickup.latitude,
         lng: pickup.longitude,
@@ -424,7 +443,10 @@ export const GoogleMapWrapper: React.FC<GoogleMapWrapperProps> = ({
       });
     }
 
-    const sortedStops = [...stops].sort((a, b) => a.stopOrder - b.stopOrder);
+    const sortedStops = [...stops]
+      .filter((s) => Number.isFinite(s.latitude) && Number.isFinite(s.longitude))
+      .sort((a, b) => a.stopOrder - b.stopOrder);
+
     sortedStops.forEach((s) => {
       list.push({
         lat: s.latitude,
@@ -435,7 +457,7 @@ export const GoogleMapWrapper: React.FC<GoogleMapWrapperProps> = ({
       });
     });
 
-    if (destination) {
+    if (destination && Number.isFinite(destination.latitude) && Number.isFinite(destination.longitude)) {
       list.push({
         lat: destination.latitude,
         lng: destination.longitude,
@@ -452,10 +474,31 @@ export const GoogleMapWrapper: React.FC<GoogleMapWrapperProps> = ({
     return waypoints.map((w) => ({ lat: w.lat, lng: w.lng }));
   }, [waypoints]);
 
-  const defaultCenter =
-    waypoints.length > 0
+  const defaultCenter = useMemo(() => {
+    return waypoints.length > 0
       ? { lat: waypoints[0].lat, lng: waypoints[0].lng }
       : { lat: 23.2156, lng: 72.6369 }; // Gandhinagar / Ahmedabad default
+  }, [waypoints]);
+
+  // Memoize origin, destination, and intermediate props for RealRoutesRenderer
+  const originProp = useMemo(() => {
+    return pickup && Number.isFinite(pickup.latitude) && Number.isFinite(pickup.longitude)
+      ? { lat: pickup.latitude, lng: pickup.longitude }
+      : null;
+  }, [pickup?.latitude, pickup?.longitude]);
+
+  const destProp = useMemo(() => {
+    return destination && Number.isFinite(destination.latitude) && Number.isFinite(destination.longitude)
+      ? { lat: destination.latitude, lng: destination.longitude }
+      : null;
+  }, [destination?.latitude, destination?.longitude]);
+
+  const intermediatesProp = useMemo(() => {
+    return [...stops]
+      .filter((s) => Number.isFinite(s.latitude) && Number.isFinite(s.longitude))
+      .sort((a, b) => a.stopOrder - b.stopOrder)
+      .map((s) => ({ lat: s.latitude, lng: s.longitude }));
+  }, [stops]);
 
   // If Google Maps API key is configured and healthy, render official @vis.gl/react-google-maps
   if (isKeyConfigured && !hasAuthError && !hasLoadError) {
@@ -465,7 +508,7 @@ export const GoogleMapWrapper: React.FC<GoogleMapWrapperProps> = ({
       >
         <APIProvider
           apiKey={activeApiKey}
-          libraries={['routes', 'places', 'marker']}
+          libraries={GOOGLE_MAPS_LIBRARIES}
           onError={() => setLoadErrorDetected(true)}
         >
           <ApiStatusTracker onStatusChange={setApiLoadingStatus} />
@@ -474,7 +517,7 @@ export const GoogleMapWrapper: React.FC<GoogleMapWrapperProps> = ({
             defaultZoom={13}
             mapId="DEMO_MAP_ID"
             styles={DARK_MAP_STYLES}
-            internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
+            internalUsageAttributionIds={INTERNAL_ATTRIBUTION_IDS}
             gestureHandling="greedy"
             disableDefaultUI={false}
             className="w-full h-full"
@@ -483,13 +526,11 @@ export const GoogleMapWrapper: React.FC<GoogleMapWrapperProps> = ({
             <MapBoundsAdjuster points={rawLatLngPoints} />
 
             {/* Real Route Calculation and Polyline Rendering */}
-            {pickup && destination && (
+            {originProp && destProp && (
               <RealRoutesRenderer
-                origin={{ lat: pickup.latitude, lng: pickup.longitude }}
-                destination={{ lat: destination.latitude, lng: destination.longitude }}
-                intermediates={stops
-                  .sort((a, b) => a.stopOrder - b.stopOrder)
-                  .map((s) => ({ lat: s.latitude, lng: s.longitude }))}
+                origin={originProp}
+                destination={destProp}
+                intermediates={intermediatesProp}
                 onRouteStartCalculating={onRouteStartCalculating}
                 onRouteCalculated={onRealRouteCalculated}
                 onRouteError={onRouteCalculationError}
@@ -517,8 +558,8 @@ export const GoogleMapWrapper: React.FC<GoogleMapWrapperProps> = ({
 
         {/* Floating Route Stats Overlay */}
         {(distanceKm !== null && durationMinutes !== null) || isRouteLoading ? (
-          <div className="absolute top-4 left-4 z-10 flex flex-col gap-1.5">
-            <div className="flex items-center gap-3 rounded-lg border border-[#1E334D] bg-[#0F1C2E]/95 px-4 py-2.5 backdrop-blur-md shadow-xl text-xs">
+          <div className="absolute top-4 left-4 z-10 flex flex-col gap-1.5 pointer-events-none">
+            <div className="flex items-center gap-3 rounded-lg border border-[#1E334D] bg-[#0F1C2E]/95 px-4 py-2.5 backdrop-blur-md shadow-xl text-xs pointer-events-auto">
               {isRouteLoading ? (
                 <div className="flex items-center gap-2 text-[#00C2FF] font-medium">
                   <div className="h-3 w-3 rounded-full border-2 border-[#00C2FF] border-t-transparent animate-spin" />
@@ -548,7 +589,7 @@ export const GoogleMapWrapper: React.FC<GoogleMapWrapperProps> = ({
 
             {/* Error badge if Google routing reported a problem */}
             {routeError && !isRouteLoading && (
-              <div className="flex items-center gap-1.5 rounded-lg border border-[#EF4444]/40 bg-[#EF4444]/15 px-3 py-1.5 text-[11px] text-[#FCA5A5] backdrop-blur-md">
+              <div className="flex items-center gap-1.5 rounded-lg border border-[#EF4444]/40 bg-[#EF4444]/15 px-3 py-1.5 text-[11px] text-[#FCA5A5] backdrop-blur-md pointer-events-auto">
                 <AlertTriangle className="h-3 w-3 shrink-0 text-[#EF4444]" />
                 <span>{routeError}</span>
               </div>

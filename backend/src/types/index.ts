@@ -58,6 +58,8 @@ export type RideStatus =
   | 'ride_completed'
   | 'cancelled';
 
+export type RouteSource = 'google_routes_api' | 'fallback_estimate';
+
 export interface Ride {
   id: string;
   rider_id: string;
@@ -74,6 +76,7 @@ export interface Ride {
   final_fare?: number | null;
   ride_type: VehicleType;
   status: RideStatus;
+  route_source?: RouteSource | null;
   requested_at: string;
   accepted_at?: string | null;
   started_at?: string | null;

@@ -30,7 +30,7 @@ export const RoadmapCard: React.FC = () => {
     {
       step: 'Step 3',
       title: 'Maps & Route Engine (Google Maps Platform)',
-      status: 'Planned',
+      status: 'Completed',
       active: false,
       items: [
         'Google Maps Autocomplete, Geocoding & Directions',
@@ -40,13 +40,13 @@ export const RoadmapCard: React.FC = () => {
     },
     {
       step: 'Step 4',
-      title: 'Ride Lifecycle & Matching Engine',
-      status: 'Planned',
-      active: false,
+      title: 'Driver Dashboard & Secure Assignment',
+      status: 'Completed',
+      active: true,
       items: [
-        'Ride request submission & driver dispatch',
-        'State transitions (requested → accepted → completed)',
-        'Multi-stop waypoints handling & cancellation logic',
+        'Online/offline driver availability toggle & vehicle registration',
+        'Available ride requests queue with earnings estimates',
+        'Atomic race-condition safe driver assignment & lifecycle states',
       ],
     },
     {

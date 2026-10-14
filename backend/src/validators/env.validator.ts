@@ -15,6 +15,7 @@ export interface EnvironmentConfig {
   CLERK_PUBLISHABLE_KEY?: string;
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
+  GOOGLE_MAPS_API_KEY?: string;
 }
 
 export function validateEnvironment(): EnvironmentConfig {
@@ -33,6 +34,11 @@ export function validateEnvironment(): EnvironmentConfig {
     CLERK_PUBLISHABLE_KEY: process.env.CLERK_PUBLISHABLE_KEY?.trim() || undefined,
     STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY?.trim() || undefined,
     STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET?.trim() || undefined,
+    GOOGLE_MAPS_API_KEY:
+      process.env.GOOGLE_MAPS_API_KEY?.trim() ||
+      process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.trim() ||
+      process.env.VITE_GOOGLE_MAPS_API_KEY?.trim() ||
+      undefined,
   };
 
   logger.info('Environment variables validated successfully', {
@@ -41,6 +47,7 @@ export function validateEnvironment(): EnvironmentConfig {
     hasDatabaseUrl: Boolean(config.DATABASE_URL),
     hasClerkKey: Boolean(config.CLERK_SECRET_KEY),
     hasStripeKey: Boolean(config.STRIPE_SECRET_KEY),
+    hasMapsKey: Boolean(config.GOOGLE_MAPS_API_KEY),
   });
 
   return config;

@@ -1,42 +1,62 @@
 import { rideRepository, RideWithStops } from '../repositories/ride.repository.ts';
 import { CreateRideInput } from '../validators/ride.validator.ts';
-import { calculateDistanceKm, estimateDurationMinutes, calculateFare } from './fare.service.ts';
+import { calculateFare } from './fare.service.ts';
+import { routeService, RouteCalculationResult } from './route.service.ts';
 import { logger } from '../utils/logger.ts';
 
 export const rideService = {
   /**
-   * Create a new ride request with server-recalculated distance, duration, and fare.
+   * Preview route metrics and fare calculations before booking.
+   * Validates coordinates and retrieves authoritative route information.
+   */
+  async previewRoute(
+    origin: { latitude: number; longitude: number; address?: string },
+    destination: { latitude: number; longitude: number; address?: string },
+    stops: Array<{ latitude: number; longitude: number; stopOrder: number; address?: string }> = []
+  ): Promise<RouteCalculationResult & { fares: Record<string, ReturnType<typeof calculateFare>> }> {
+    const route = await routeService.calculateRoute(origin, destination, stops);
+    const fares = {
+      economy: calculateFare('economy', route.distanceKm, route.durationMinutes),
+      comfort: calculateFare('comfort', route.distanceKm, route.durationMinutes),
+      premium: calculateFare('premium', route.distanceKm, route.durationMinutes),
+    };
+    return {
+      ...route,
+      fares,
+    };
+  },
+
+  /**
+   * Create a new ride request with server-authoritative route distance, duration, and fare.
+   * Prioritizes real Google Routes API when available; otherwise uses honest fallback estimation.
    * Enforces status = 'requested', driver_id = null.
    */
   async createRide(riderId: string, input: CreateRideInput): Promise<RideWithStops> {
-    // 1. Calculate multi-segment distance
-    // Waypoints order: Pickup -> Stop 1 -> Stop 2 -> Stop 3 -> Destination
-    const waypoints = [
-      { lat: input.pickupLatitude, lng: input.pickupLongitude },
-      ...(input.stops || [])
-        .sort((a, b) => a.stopOrder - b.stopOrder)
-        .map((s) => ({ lat: s.latitude, lng: s.longitude })),
-      { lat: input.destinationLatitude, lng: input.destinationLongitude },
-    ];
+    // 1. Authoritative server-side route calculation
+    // Preserves strict sequential waypoint ordering: Pickup -> Stop 1 -> Stop 2 -> Destination
+    const routeResult = await routeService.calculateRoute(
+      {
+        latitude: input.pickupLatitude,
+        longitude: input.pickupLongitude,
+        address: input.pickupAddress,
+      },
+      {
+        latitude: input.destinationLatitude,
+        longitude: input.destinationLongitude,
+        address: input.destinationAddress,
+      },
+      (input.stops || []).map((s) => ({
+        latitude: s.latitude,
+        longitude: s.longitude,
+        stopOrder: s.stopOrder,
+        address: s.address,
+      }))
+    );
 
-    let totalDistanceKm = 0;
-    for (let i = 0; i < waypoints.length - 1; i++) {
-      const legDist = calculateDistanceKm(
-        waypoints[i].lat,
-        waypoints[i].lng,
-        waypoints[i + 1].lat,
-        waypoints[i + 1].lng
-      );
-      totalDistanceKm += legDist;
-    }
+    const totalDistanceKm = routeResult.distanceKm;
+    const estimatedDuration = routeResult.durationMinutes;
 
-    // Minimum distance baseline (at least 0.5 km)
-    totalDistanceKm = Math.max(0.5, Number(totalDistanceKm.toFixed(2)));
-
-    // 2. Calculate duration
-    const estimatedDuration = estimateDurationMinutes(totalDistanceKm);
-
-    // 3. Centralized server-calculated fare
+    // 2. Authoritative server fare calculation
     const fareResult = calculateFare(input.rideType, totalDistanceKm, estimatedDuration);
 
     logger.info('Calculated backend ride metrics', {
@@ -45,10 +65,12 @@ export const rideService = {
       totalDistanceKm,
       estimatedDuration,
       estimatedFare: fareResult.estimatedFare,
+      routeSource: routeResult.routeSource,
+      isGoogleRoute: routeResult.isGoogleRoute,
       stopsCount: input.stops?.length || 0,
     });
 
-    // 4. Persist to database with safe status 'requested'
+    // 3. Persist to database with safe status 'requested' and driver_id null
     const newRide = await rideRepository.create(
       {
         rider_id: riderId,
@@ -63,6 +85,7 @@ export const rideService = {
         estimated_fare: fareResult.estimatedFare,
         ride_type: input.rideType,
         status: 'requested',
+        route_source: routeResult.routeSource,
       },
       (input.stops || []).map((s) => ({
         stop_order: s.stopOrder,

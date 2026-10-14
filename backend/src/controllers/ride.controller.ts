@@ -4,6 +4,66 @@ import { rideService } from '../services/ride.service.ts';
 
 export const rideController = {
   /**
+   * POST /api/rides/route
+   * Calculate authoritative route preview and fare estimates
+   */
+  async previewRoute(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { pickup, destination, stops } = req.body || {};
+      const pickupLat = Number(pickup?.latitude ?? pickup?.lat);
+      const pickupLng = Number(pickup?.longitude ?? pickup?.lng);
+      const destLat = Number(destination?.latitude ?? destination?.lat);
+      const destLng = Number(destination?.longitude ?? destination?.lng);
+
+      if (
+        !Number.isFinite(pickupLat) ||
+        !Number.isFinite(pickupLng) ||
+        !Number.isFinite(destLat) ||
+        !Number.isFinite(destLng) ||
+        pickupLat < -90 ||
+        pickupLat > 90 ||
+        destLat < -90 ||
+        destLat > 90 ||
+        pickupLng < -180 ||
+        pickupLng > 180 ||
+        destLng < -180 ||
+        destLng > 180
+      ) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: 'INVALID_COORDINATES',
+            message: 'Valid pickup and destination coordinates are required.',
+          },
+        });
+        return;
+      }
+
+      const formattedStops = Array.isArray(stops)
+        ? stops.map((s, idx) => ({
+            latitude: Number(s.latitude ?? s.lat),
+            longitude: Number(s.longitude ?? s.lng),
+            stopOrder: Number(s.stopOrder ?? idx + 1),
+            address: typeof s.address === 'string' ? s.address : undefined,
+          }))
+        : [];
+
+      const result = await rideService.previewRoute(
+        { latitude: pickupLat, longitude: pickupLng, address: pickup?.address },
+        { latitude: destLat, longitude: destLng, address: destination?.address },
+        formattedStops
+      );
+
+      res.status(200).json({
+        success: true,
+        data: result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  /**
    * POST /api/rides
    * Create a new ride request (Rider only).
    */

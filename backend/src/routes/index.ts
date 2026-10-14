@@ -2,6 +2,7 @@ import { Router } from 'express';
 import healthRoutes from './health.routes.ts';
 import authRoutes from './auth.routes.ts';
 import rideRoutes from './ride.routes.ts';
+import driverRoutes from './driver.routes.ts';
 
 const apiRouter = Router();
 
@@ -13,6 +14,9 @@ apiRouter.use('/auth', authRoutes);
 
 // Mount ride routes under /api/rides
 apiRouter.use('/rides', rideRoutes);
+
+// Mount driver routes under /api/driver
+apiRouter.use('/driver', driverRoutes);
 
 // Public config route for client-side public API keys (Google Maps Platform browser key)
 apiRouter.get('/config/maps', (_req, res) => {

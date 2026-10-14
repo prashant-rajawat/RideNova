@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   MapPin,
   Navigation,
@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { GoogleMapWrapper, LocationPoint, StopPoint } from '../maps/GoogleMapWrapper.tsx';
 import { calculateDistanceKm, estimateDurationMinutes, calculateFare, FARE_CONFIG } from '../../lib/fare.ts';
-import { VehicleType, RideWithStops } from '../../types/index.ts';
+import { VehicleType, RideWithStops, RouteSource } from '../../types/index.ts';
 import { api, ApiError } from '../../lib/api.ts';
 import { useAuthSession } from '../../context/AuthContext.tsx';
 
@@ -82,18 +82,24 @@ function getDeterministicCoordinate(text: string, baseLat = 23.2156, baseLng = 7
 export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBooked }) => {
   const { user } = useAuthSession();
 
-  // Booking Form State
-  const [pickup, setPickup] = useState<LocationPoint | null>(null);
-  const [pickupInput, setPickupInput] = useState('');
-  const [destination, setDestination] = useState<LocationPoint | null>(null);
-  const [destInput, setDestInput] = useState('');
-  const [stops, setStops] = useState<StopPoint[]>([]);
+  // Booking Form State initialized with default route: Pickup -> Stop 1 -> Stop 2 -> Destination
+  const [pickup, setPickup] = useState<LocationPoint | null>(() => SUGGESTED_PLACES[0]);
+  const [pickupInput, setPickupInput] = useState(() => SUGGESTED_PLACES[0].address);
+
+  const [destination, setDestination] = useState<LocationPoint | null>(() => SUGGESTED_PLACES[2]);
+  const [destInput, setDestInput] = useState(() => SUGGESTED_PLACES[2].address);
+
+  const [stops, setStops] = useState<StopPoint[]>([
+    { ...SUGGESTED_PLACES[4], stopOrder: 1 },
+    { ...SUGGESTED_PLACES[5], stopOrder: 2 },
+  ]);
 
   // Selection & Route States
   const [selectedRideType, setSelectedRideType] = useState<VehicleType>('economy');
   const [distanceKm, setDistanceKm] = useState<number | null>(null);
   const [durationMinutes, setDurationMinutes] = useState<number | null>(null);
   const [isRealRoute, setIsRealRoute] = useState<boolean>(false);
+  const [routeSource, setRouteSource] = useState<RouteSource>('fallback_estimate');
   const [isRouteLoading, setIsRouteLoading] = useState<boolean>(false);
   const [routeError, setRouteError] = useState<string | null>(null);
 
@@ -104,12 +110,19 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [confirmedRide, setConfirmedRide] = useState<RideWithStops | null>(null);
 
-  // Suggestions Dropdowns
+  // Suggestions Dropdowns & Predictions
   const [activeSuggestionField, setActiveSuggestionField] = useState<'pickup' | 'dest' | number | null>(null);
-  const [googlePredictions, setGooglePredictions] = useState<{ description: string; placeId: string }[]>([]);
+  const [googlePredictions, setGooglePredictions] = useState<any[]>([]);
 
-  // Query live Google Places Autocomplete when API key and Places library are active
+  // Ref to track debounce timer for autocomplete predictions
+  const autocompleteTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Query live Google Places Autocomplete (New) using AutocompleteSuggestion API with 250ms debounce and stale response protection
   useEffect(() => {
+    if (autocompleteTimerRef.current) {
+      clearTimeout(autocompleteTimerRef.current);
+    }
+
     const currentInput =
       activeSuggestionField === 'pickup'
         ? pickupInput
@@ -124,31 +137,84 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
       return;
     }
 
-    if (typeof window !== 'undefined' && (window as any).google?.maps?.places?.AutocompleteService) {
+    const fieldAtRequest = activeSuggestionField;
+    const inputAtRequest = currentInput.trim();
+
+    autocompleteTimerRef.current = setTimeout(async () => {
       try {
-        const service = new (window as any).google.maps.places.AutocompleteService();
-        service.getPlacePredictions(
-          { input: currentInput.trim() },
-          (predictions: any, status: any) => {
-            if (status === (window as any).google.maps.places.PlacesServiceStatus.OK && predictions) {
-              setGooglePredictions(
-                predictions.map((p: any) => ({
-                  description: p.description,
-                  placeId: p.place_id,
-                }))
-              );
-            } else {
-              setGooglePredictions([]);
+        if (typeof window !== 'undefined' && (window as any).google?.maps?.importLibrary) {
+          const placesLib = await (window as any).google.maps.importLibrary("places");
+          if (placesLib?.AutocompleteSuggestion?.fetchAutocompleteSuggestions) {
+            const { suggestions } = await placesLib.AutocompleteSuggestion.fetchAutocompleteSuggestions({
+              input: inputAtRequest,
+            });
+            // Stale response protection: verify active field and input haven't changed
+            const activeNow =
+              fieldAtRequest === 'pickup'
+                ? pickupInput
+                : fieldAtRequest === 'dest'
+                ? destInput
+                : typeof fieldAtRequest === 'number'
+                ? stops.find((s) => s.stopOrder === fieldAtRequest)?.address || ''
+                : '';
+
+            if (activeSuggestionField === fieldAtRequest && activeNow.trim() === inputAtRequest && Array.isArray(suggestions)) {
+              setGooglePredictions(suggestions.slice(0, 5));
+              setRouteError(null);
+              return;
             }
           }
-        );
-      } catch {
+        }
+        setGooglePredictions([]);
+      } catch (err: any) {
+        console.warn('Places API (New) Autocomplete error:', err);
+        setRouteError('Places Autocomplete failed. Using suggested locations or manual address.');
         setGooglePredictions([]);
       }
-    }
+    }, 250);
+
+    return () => {
+      if (autocompleteTimerRef.current) {
+        clearTimeout(autocompleteTimerRef.current);
+      }
+    };
   }, [pickupInput, destInput, stops, activeSuggestionField]);
 
-  // Recalculate route whenever pickup, destination, or stops change
+  // Stable callbacks for GoogleMapWrapper to prevent re-render loops
+  const handleRouteStartCalculating = useCallback(() => {
+    setIsRouteLoading(true);
+    setRouteError(null);
+  }, []);
+
+  const handleRealRouteCalculated = useCallback(
+    (realKm: number, realDur: number, isReal?: boolean, routeSrc?: RouteSource) => {
+      if (isReal && realKm > 0) {
+        setDistanceKm(realKm);
+        setDurationMinutes(realDur);
+        setIsRealRoute(true);
+        setRouteSource(routeSrc || 'google_routes_api');
+        setRouteError(null);
+      } else {
+        setIsRealRoute(false);
+        setRouteSource('fallback_estimate');
+      }
+      setIsRouteLoading(false);
+    },
+    []
+  );
+
+  const handleRouteCalculationError = useCallback((err: string) => {
+    setIsRouteLoading(false);
+    setRouteError(err);
+    setIsRealRoute(false);
+    setRouteSource('fallback_estimate');
+  }, []);
+
+  // Compute baseline straight-line fallback distance only when pickup or destination coordinates change
+  const routeCoordsKey = `${pickup?.latitude},${pickup?.longitude}|${destination?.latitude},${destination?.longitude}|${stops
+    .map((s) => `${s.stopOrder}:${s.latitude},${s.longitude}`)
+    .join(';')}`;
+
   useEffect(() => {
     if (!pickup || !destination) {
       setDistanceKm(null);
@@ -159,9 +225,10 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
       return;
     }
 
+    const sortedStops = [...stops].sort((a, b) => a.stopOrder - b.stopOrder);
     const waypoints = [
       { lat: pickup.latitude, lng: pickup.longitude },
-      ...stops.sort((a, b) => a.stopOrder - b.stopOrder).map((s) => ({ lat: s.latitude, lng: s.longitude })),
+      ...sortedStops.map((s) => ({ lat: s.latitude, lng: s.longitude })),
       { lat: destination.latitude, lng: destination.longitude },
     ];
 
@@ -175,16 +242,14 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
       );
     }
 
-    const computedDist = Math.max(0.5, Number(totalDist.toFixed(1)));
-    const computedDur = estimateDurationMinutes(computedDist);
+    const fallbackDist = Math.max(0.5, Number(totalDist.toFixed(1)));
+    const fallbackDur = estimateDurationMinutes(fallbackDist);
 
-    // Initial estimation while Google Maps calculates the authoritative route
-    setDistanceKm(computedDist);
-    setDurationMinutes(computedDur);
-    setIsRealRoute(false);
+    // Set baseline initial estimation if we don't already have a valid real route
+    setDistanceKm((prev) => (prev !== null && isRealRoute ? prev : fallbackDist));
+    setDurationMinutes((prev) => (prev !== null && isRealRoute ? prev : fallbackDur));
     setIsRouteLoading(true);
-    setRouteError(null);
-  }, [pickup, destination, stops]);
+  }, [routeCoordsKey]);
 
   // Current Location Handler
   const handleUseCurrentLocation = () => {
@@ -200,8 +265,8 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
         const { latitude, longitude } = position.coords;
         const currentLoc: LocationPoint = {
           address: 'My Current Location (GPS)',
-          latitude,
-          longitude,
+          latitude: Number(latitude.toFixed(4)),
+          longitude: Number(longitude.toFixed(4)),
         };
         setPickup(currentLoc);
         setPickupInput(currentLoc.address);
@@ -223,7 +288,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
   const handleAddStop = () => {
     if (stops.length >= 3) return;
     const newOrder = stops.length + 1;
-    const defaultSuggestion = SUGGESTED_PLACES[newOrder % SUGGESTED_PLACES.length];
+    const defaultSuggestion = SUGGESTED_PLACES[(newOrder + 2) % SUGGESTED_PLACES.length];
     setStops([
       ...stops,
       {
@@ -235,7 +300,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
     ]);
   };
 
-  // Remove stop
+  // Remove stop and re-index stopOrder sequentially
   const handleRemoveStop = (order: number) => {
     const updated = stops
       .filter((s) => s.stopOrder !== order)
@@ -259,7 +324,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
     setStops(updated);
   };
 
-  // Select location from suggestion
+  // Select location from suggestion or coordinate resolution
   const handleSelectSuggestion = (
     field: 'pickup' | 'dest' | number,
     point: LocationPoint
@@ -283,39 +348,67 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
     setActiveSuggestionField(null);
   };
 
-  // Select place from live Google Autocomplete prediction
-  const handleSelectGooglePrediction = (
+  // Select place from modern Places API (New) AutocompleteSuggestion prediction
+  const handleSelectGooglePrediction = async (
     field: 'pickup' | 'dest' | number,
-    pred: { description: string; placeId: string }
+    sug: any
   ) => {
-    if (typeof window !== 'undefined' && (window as any).google?.maps?.Geocoder) {
-      const geocoder = new (window as any).google.maps.Geocoder();
-      geocoder.geocode({ placeId: pred.placeId }, (results: any, status: any) => {
-        if (status === 'OK' && results && results[0]?.geometry?.location) {
-          const loc = results[0].geometry.location;
+    try {
+      const placePrediction = sug.placePrediction;
+      if (placePrediction && typeof placePrediction.toPlace === 'function') {
+        const place = placePrediction.toPlace();
+        await place.fetchFields({ fields: ['location', 'formattedAddress', 'displayName'] });
+        if (place.location) {
+          const lat = Number(place.location.lat().toFixed(4));
+          const lng = Number(place.location.lng().toFixed(4));
+          const addr = place.formattedAddress || place.displayName || placePrediction.text?.text || 'Selected Place';
           handleSelectSuggestion(field, {
-            address: pred.description,
-            latitude: typeof loc.lat === 'function' ? Number(loc.lat().toFixed(4)) : Number(loc.lat.toFixed(4)),
-            longitude: typeof loc.lng === 'function' ? Number(loc.lng().toFixed(4)) : Number(loc.lng.toFixed(4)),
+            address: addr,
+            latitude: lat,
+            longitude: lng,
           });
+          setActiveSuggestionField(null);
           return;
         }
-        // Fallback to deterministic coordinates if geocoding fails
-        const coords = getDeterministicCoordinate(pred.description);
-        handleSelectSuggestion(field, {
-          address: pred.description,
-          latitude: coords.lat,
-          longitude: coords.lng,
-        });
-      });
-    } else {
-      const coords = getDeterministicCoordinate(pred.description);
-      handleSelectSuggestion(field, {
-        address: pred.description,
-        latitude: coords.lat,
-        longitude: coords.lng,
-      });
+      }
+    } catch (err) {
+      console.warn('Places API (New) fetchFields error:', err);
     }
+    // Fallback
+    const desc = sug.placePrediction?.text?.text || sug.description || 'Selected Place';
+    const coords = getDeterministicCoordinate(desc);
+    handleSelectSuggestion(field, {
+      address: desc,
+      latitude: coords.lat,
+      longitude: coords.lng,
+    });
+    setActiveSuggestionField(null);
+  };
+
+  // Safely resolve manual typed text to a valid coordinate point
+  const handleResolveManualAddress = (
+    field: 'pickup' | 'dest' | number,
+    text: string
+  ) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+
+    // 1. Check if it matches any suggested place
+    const matched = SUGGESTED_PLACES.find(
+      (p) => p.address.toLowerCase() === trimmed.toLowerCase() || p.address.toLowerCase().includes(trimmed.toLowerCase())
+    );
+    if (matched) {
+      handleSelectSuggestion(field, matched);
+      return;
+    }
+
+    // 2. Fallback to deterministic coordinates
+    const coords = getDeterministicCoordinate(trimmed);
+    handleSelectSuggestion(field, {
+      address: trimmed,
+      latitude: coords.lat,
+      longitude: coords.lng,
+    });
   };
 
   // Confirm and create ride request
@@ -358,19 +451,23 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
 
   // Reset booking form
   const handleReset = () => {
-    setPickup(null);
-    setPickupInput('');
-    setDestination(null);
-    setDestInput('');
-    setStops([]);
+    setPickup(SUGGESTED_PLACES[0]);
+    setPickupInput(SUGGESTED_PLACES[0].address);
+    setDestination(SUGGESTED_PLACES[2]);
+    setDestInput(SUGGESTED_PLACES[2].address);
+    setStops([
+      { ...SUGGESTED_PLACES[4], stopOrder: 1 },
+      { ...SUGGESTED_PLACES[5], stopOrder: 2 },
+    ]);
     setConfirmedRide(null);
     setBookingError(null);
   };
 
   // Calculated fare details
-  const activeFare = distanceKm && durationMinutes
-    ? calculateFare(selectedRideType, distanceKm, durationMinutes)
-    : null;
+  const activeFare =
+    distanceKm && durationMinutes
+      ? calculateFare(selectedRideType, distanceKm, durationMinutes)
+      : null;
 
   // Confirmation Screen View
   if (confirmedRide) {
@@ -480,33 +577,27 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
         </button>
       </div>
 
-      {/* Responsive Layout: Desktop 2-column (Left panel, Right Map) / Mobile Stacked (Top Map, Bottom panel) */}
-      <div className="flex flex-col-reverse lg:grid lg:grid-cols-12 gap-6 items-start">
-        {/* Left Column: Booking Form Panel */}
-        <div className="w-full lg:col-span-5 rounded-xl border border-[#1E334D] bg-[#0F1C2E] p-5 sm:p-6 shadow-sm space-y-6">
-          {/* Booking Steps Indicator */}
-          <div className="flex items-center justify-between pb-4 border-b border-[#1E334D]">
-            <span className="text-xs font-bold text-[#E5F2FF]">1. Route Details</span>
-            <span className="text-xs text-[#8FA6BF]">Gandhinagar / Ahmedabad</span>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* Left Column: Route Configuration Panel */}
+        <div className="w-full lg:col-span-5 rounded-xl border border-[#1E334D] bg-[#0F1C2E] p-5 sm:p-6 shadow-xl space-y-5">
+          <div className="flex items-center justify-between border-b border-[#1E334D] pb-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-[#E5F2FF]">
+              1. Route & Stops
+            </span>
+            <span className="text-[11px] text-[#8FA6BF]">
+              {stops.length} stop{stops.length === 1 ? '' : 's'} added
+            </span>
           </div>
 
-          {/* Geolocation Notice / Error */}
+          {/* Location Error Notice */}
           {locationError && (
-            <div className="rounded-lg border border-[#F59E0B]/30 bg-[#F59E0B]/10 p-3 text-xs text-[#F59E0B] flex items-start justify-between gap-2">
-              <div className="flex items-start gap-2">
-                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-[#F59E0B]" />
-                <span>{locationError}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setLocationError(null)}
-                className="text-[11px] underline text-[#F59E0B] hover:text-[#FBBF24] shrink-0 cursor-pointer"
-              >
-                Dismiss
-              </button>
+            <div className="rounded-lg border border-[#F59E0B]/30 bg-[#F59E0B]/10 p-2.5 text-xs text-[#F59E0B] flex items-start gap-2">
+              <Info className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>{locationError}</span>
             </div>
           )}
 
+          {/* Booking Error Notice */}
           {bookingError && (
             <div className="rounded-lg border border-[#EF4444]/30 bg-[#EF4444]/10 p-3 text-xs text-[#EF4444] flex items-start gap-2">
               <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
@@ -514,7 +605,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
             </div>
           )}
 
-          {/* Location Inputs */}
+          {/* Waypoints Input Sequence */}
           <div className="space-y-4">
             {/* Pickup Location */}
             <div className="relative">
@@ -546,6 +637,12 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
                     setPickupInput(e.target.value);
                     setActiveSuggestionField('pickup');
                   }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleResolveManualAddress('pickup', pickupInput);
+                      setActiveSuggestionField(null);
+                    }
+                  }}
                   className="w-full rounded-lg border border-[#1E334D] bg-[#07111F] px-3.5 py-2.5 text-xs text-[#E5F2FF] placeholder-[#8FA6BF]/50 focus:border-[#00C2FF] focus:outline-none"
                 />
               </div>
@@ -558,24 +655,27 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
                       <span className="block px-2 py-1 text-[10px] font-semibold text-[#00C2FF] uppercase tracking-wider flex items-center gap-1">
                         <Sparkles className="h-3 w-3" /> Live Places Autocomplete
                       </span>
-                      {googlePredictions.map((pred, pIdx) => (
-                        <button
-                          key={`pred-${pIdx}`}
-                          type="button"
-                          onClick={() => handleSelectGooglePrediction('pickup', pred)}
-                          className="w-full text-left px-2.5 py-1.5 text-xs text-[#E5F2FF] hover:bg-[#1E334D] rounded-md transition-colors flex items-center gap-2"
-                        >
-                          <MapPin className="h-3.5 w-3.5 text-[#00C2FF] shrink-0" />
-                          <span className="truncate">{pred.description}</span>
-                        </button>
-                      ))}
+                      {googlePredictions.map((pred, pIdx) => {
+                        const sugText = pred.placePrediction?.text?.text || pred.description || 'Location';
+                        return (
+                          <button
+                            key={`pred-${pIdx}`}
+                            type="button"
+                            onClick={() => handleSelectGooglePrediction('pickup', pred)}
+                            className="w-full text-left px-2.5 py-1.5 text-xs text-[#E5F2FF] hover:bg-[#1E334D] rounded-md transition-colors flex items-center gap-2"
+                          >
+                            <MapPin className="h-3.5 w-3.5 text-[#00C2FF] shrink-0" />
+                            <span className="truncate">{sugText}</span>
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                   <span className="block px-2 py-1 text-[10px] font-semibold text-[#8FA6BF] uppercase tracking-wider">
                     Recommended Locations
                   </span>
-                  {SUGGESTED_PLACES.filter((p) =>
-                    !pickupInput.trim() || p.address.toLowerCase().includes(pickupInput.toLowerCase().trim())
+                  {SUGGESTED_PLACES.filter(
+                    (p) => !pickupInput.trim() || p.address.toLowerCase().includes(pickupInput.toLowerCase().trim())
                   ).map((place, idx) => (
                     <button
                       key={idx}
@@ -590,18 +690,11 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
                   {pickupInput.trim().length > 1 && (
                     <button
                       type="button"
-                      onClick={() => {
-                        const coords = getDeterministicCoordinate(pickupInput);
-                        handleSelectSuggestion('pickup', {
-                          address: pickupInput.trim(),
-                          latitude: coords.lat,
-                          longitude: coords.lng,
-                        });
-                      }}
+                      onClick={() => handleResolveManualAddress('pickup', pickupInput)}
                       className="w-full text-left px-2.5 py-1.5 mt-1 border-t border-[#1E334D]/80 text-xs text-[#00C2FF] hover:bg-[#1E334D] rounded-md transition-colors flex items-center gap-2"
                     >
                       <MapPin className="h-3.5 w-3.5 text-[#00C2FF] shrink-0" />
-                      <span className="truncate">Use custom: &ldquo;{pickupInput.trim()}&rdquo;</span>
+                      <span className="truncate">Use &ldquo;{pickupInput.trim()}&rdquo;</span>
                     </button>
                   )}
                 </div>
@@ -660,19 +753,49 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
                     onChange={(e) => {
                       const val = e.target.value;
                       setStops(
-                        stops.map((s) =>
-                          s.stopOrder === stop.stopOrder ? { ...s, address: val } : s
-                        )
+                        stops.map((s) => (s.stopOrder === stop.stopOrder ? { ...s, address: val } : s))
                       );
                       setActiveSuggestionField(stop.stopOrder);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleResolveManualAddress(stop.stopOrder, stop.address);
+                        setActiveSuggestionField(null);
+                      }
                     }}
                     className="w-full rounded-lg border border-[#1E334D] bg-[#07111F] px-3.5 py-2.5 text-xs text-[#E5F2FF] focus:border-[#F59E0B] focus:outline-none"
                   />
                 </div>
 
                 {activeSuggestionField === stop.stopOrder && (
-                  <div className="absolute left-0 right-0 top-full mt-1 z-30 rounded-lg border border-[#1E334D] bg-[#0F1C2E] p-2 shadow-2xl max-h-40 overflow-y-auto">
-                    {SUGGESTED_PLACES.map((place, idx) => (
+                  <div className="absolute left-0 right-0 top-full mt-1 z-30 rounded-lg border border-[#1E334D] bg-[#0F1C2E] p-2 shadow-2xl max-h-52 overflow-y-auto">
+                    {googlePredictions.length > 0 && (
+                      <div className="mb-2 pb-2 border-b border-[#1E334D]">
+                        <span className="block px-2 py-1 text-[10px] font-semibold text-[#00C2FF] uppercase tracking-wider flex items-center gap-1">
+                          <Sparkles className="h-3 w-3" /> Live Places Autocomplete
+                        </span>
+                        {googlePredictions.map((pred, pIdx) => {
+                          const sugText = pred.placePrediction?.text?.text || pred.description || 'Location';
+                          return (
+                            <button
+                              key={`pred-${pIdx}`}
+                              type="button"
+                              onClick={() => handleSelectGooglePrediction(stop.stopOrder, pred)}
+                              className="w-full text-left px-2.5 py-1.5 text-xs text-[#E5F2FF] hover:bg-[#1E334D] rounded-md transition-colors flex items-center gap-2"
+                            >
+                              <MapPin className="h-3.5 w-3.5 text-[#00C2FF] shrink-0" />
+                              <span className="truncate">{sugText}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <span className="block px-2 py-1 text-[10px] font-semibold text-[#8FA6BF] uppercase tracking-wider">
+                      Recommended Locations
+                    </span>
+                    {SUGGESTED_PLACES.filter(
+                      (p) => !stop.address.trim() || p.address.toLowerCase().includes(stop.address.toLowerCase().trim())
+                    ).map((place, idx) => (
                       <button
                         key={idx}
                         type="button"
@@ -683,6 +806,16 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
                         <span className="truncate">{place.address}</span>
                       </button>
                     ))}
+                    {stop.address.trim().length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleResolveManualAddress(stop.stopOrder, stop.address)}
+                        className="w-full text-left px-2.5 py-1.5 mt-1 border-t border-[#1E334D]/80 text-xs text-[#00C2FF] hover:bg-[#1E334D] rounded-md transition-colors flex items-center gap-2"
+                      >
+                        <MapPin className="h-3.5 w-3.5 text-[#00C2FF] shrink-0" />
+                        <span className="truncate">Use &ldquo;{stop.address.trim()}&rdquo;</span>
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -721,6 +854,12 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
                     setDestInput(e.target.value);
                     setActiveSuggestionField('dest');
                   }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleResolveManualAddress('dest', destInput);
+                      setActiveSuggestionField(null);
+                    }
+                  }}
                   className="w-full rounded-lg border border-[#1E334D] bg-[#07111F] px-3.5 py-2.5 text-xs text-[#E5F2FF] placeholder-[#8FA6BF]/50 focus:border-[#00C2FF] focus:outline-none"
                 />
               </div>
@@ -732,24 +871,27 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
                       <span className="block px-2 py-1 text-[10px] font-semibold text-[#00C2FF] uppercase tracking-wider flex items-center gap-1">
                         <Sparkles className="h-3 w-3" /> Live Places Autocomplete
                       </span>
-                      {googlePredictions.map((pred, pIdx) => (
-                        <button
-                          key={`dest-pred-${pIdx}`}
-                          type="button"
-                          onClick={() => handleSelectGooglePrediction('dest', pred)}
-                          className="w-full text-left px-2.5 py-1.5 text-xs text-[#E5F2FF] hover:bg-[#1E334D] rounded-md transition-colors flex items-center gap-2"
-                        >
-                          <MapPin className="h-3.5 w-3.5 text-[#00C2FF] shrink-0" />
-                          <span className="truncate">{pred.description}</span>
-                        </button>
-                      ))}
+                      {googlePredictions.map((pred, pIdx) => {
+                        const sugText = pred.placePrediction?.text?.text || pred.description || 'Location';
+                        return (
+                          <button
+                            key={`dest-pred-${pIdx}`}
+                            type="button"
+                            onClick={() => handleSelectGooglePrediction('dest', pred)}
+                            className="w-full text-left px-2.5 py-1.5 text-xs text-[#E5F2FF] hover:bg-[#1E334D] rounded-md transition-colors flex items-center gap-2"
+                          >
+                            <MapPin className="h-3.5 w-3.5 text-[#00C2FF] shrink-0" />
+                            <span className="truncate">{sugText}</span>
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                   <span className="block px-2 py-1 text-[10px] font-semibold text-[#8FA6BF] uppercase tracking-wider">
                     Recommended Destinations
                   </span>
-                  {SUGGESTED_PLACES.filter((p) =>
-                    !destInput.trim() || p.address.toLowerCase().includes(destInput.toLowerCase().trim())
+                  {SUGGESTED_PLACES.filter(
+                    (p) => !destInput.trim() || p.address.toLowerCase().includes(destInput.toLowerCase().trim())
                   ).map((place, idx) => (
                     <button
                       key={idx}
@@ -764,18 +906,11 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
                   {destInput.trim().length > 1 && (
                     <button
                       type="button"
-                      onClick={() => {
-                        const coords = getDeterministicCoordinate(destInput, 23.0225, 72.5714);
-                        handleSelectSuggestion('dest', {
-                          address: destInput.trim(),
-                          latitude: coords.lat,
-                          longitude: coords.lng,
-                        });
-                      }}
+                      onClick={() => handleResolveManualAddress('dest', destInput)}
                       className="w-full text-left px-2.5 py-1.5 mt-1 border-t border-[#1E334D]/80 text-xs text-[#00C2FF] hover:bg-[#1E334D] rounded-md transition-colors flex items-center gap-2"
                     >
                       <MapPin className="h-3.5 w-3.5 text-[#00C2FF] shrink-0" />
-                      <span className="truncate">Use custom: &ldquo;{destInput.trim()}&rdquo;</span>
+                      <span className="truncate">Use &ldquo;{destInput.trim()}&rdquo;</span>
                     </button>
                   )}
                 </div>
@@ -825,6 +960,35 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
             </div>
           ) : null}
 
+          {/* Duplicate Consecutive Waypoint Warning Check */}
+          {(() => {
+            const allWaypointsForCheck = [
+              { label: 'Pickup', address: pickup?.address },
+              ...stops.map((s) => ({ label: `Stop ${s.stopOrder}`, address: s.address })),
+              { label: 'Destination', address: destination?.address },
+            ];
+            const duplicateWarnings: string[] = [];
+            for (let i = 0; i < allWaypointsForCheck.length - 1; i++) {
+              const curr = allWaypointsForCheck[i];
+              const next = allWaypointsForCheck[i + 1];
+              if (curr.address && next.address && curr.address.trim().toLowerCase() === next.address.trim().toLowerCase()) {
+                duplicateWarnings.push(`Warning: ${curr.label} and ${next.label} have identical addresses ("${curr.address}").`);
+              }
+            }
+            if (duplicateWarnings.length === 0) return null;
+            return (
+              <div className="rounded-lg border border-[#F59E0B]/40 bg-[#F59E0B]/10 p-2.5 text-xs text-[#F59E0B] space-y-1">
+                <div className="font-semibold flex items-center gap-1.5">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>Duplicate Consecutive Waypoint Warning</span>
+                </div>
+                {duplicateWarnings.map((w, idx) => (
+                  <p key={idx} className="pl-5">{w}</p>
+                ))}
+              </div>
+            );
+          })()}
+
           {/* Ride Type Selection (Economy, Comfort, Premium) */}
           <div className="pt-4 border-t border-[#1E334D] space-y-3">
             <span className="text-xs font-bold text-[#E5F2FF] block">
@@ -835,9 +999,10 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
               {(['economy', 'comfort', 'premium'] as VehicleType[]).map((type) => {
                 const config = FARE_CONFIG[type];
                 const isSelected = selectedRideType === type;
-                const calculatedEstimate = distanceKm && durationMinutes
-                  ? calculateFare(type, distanceKm, durationMinutes).estimatedFare
-                  : null;
+                const calculatedEstimate =
+                  distanceKm && durationMinutes
+                    ? calculateFare(type, distanceKm, durationMinutes).estimatedFare
+                    : null;
 
                 return (
                   <div
@@ -850,7 +1015,11 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
                     }`}
                   >
                     <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-lg ${isSelected ? 'bg-[#00C2FF] text-[#07111F]' : 'bg-[#1E334D] text-[#E5F2FF]'}`}>
+                      <div
+                        className={`p-2 rounded-lg ${
+                          isSelected ? 'bg-[#00C2FF] text-[#07111F]' : 'bg-[#1E334D] text-[#E5F2FF]'
+                        }`}
+                      >
                         <Car className="h-4 w-4" />
                       </div>
                       <div>
@@ -902,7 +1071,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
               </div>
 
               <p className="text-[11px] text-[#8FA6BF] pt-1 leading-normal italic">
-                * Estimated fare. Final fare may vary based on actual trip distance and duration.
+                * Estimated fare. Final fare calculated authoritatively by backend using verified route metrics.
               </p>
             </div>
           )}
@@ -941,24 +1110,9 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
             isRealRoute={isRealRoute}
             isRouteLoading={isRouteLoading}
             routeError={routeError}
-            onRouteStartCalculating={() => {
-              setIsRouteLoading(true);
-              setRouteError(null);
-            }}
-            onRealRouteCalculated={(realKm, realDur, isReal) => {
-              if (isReal && realKm > 0) {
-                setDistanceKm(realKm);
-                setDurationMinutes(realDur);
-                setIsRealRoute(true);
-              }
-              setIsRouteLoading(false);
-              setRouteError(null);
-            }}
-            onRouteCalculationError={(err) => {
-              setIsRouteLoading(false);
-              setRouteError(err);
-              setIsRealRoute(false);
-            }}
+            onRouteStartCalculating={handleRouteStartCalculating}
+            onRealRouteCalculated={handleRealRouteCalculated}
+            onRouteCalculationError={handleRouteCalculationError}
           />
         </div>
       </div>

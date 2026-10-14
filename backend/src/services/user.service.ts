@@ -1,4 +1,5 @@
 import { userRepository } from '../repositories/user.repository.ts';
+import { driverRepository } from '../repositories/driver.repository.ts';
 import { User, UserRole } from '../types/index.ts';
 import { logger } from '../utils/logger.ts';
 
@@ -140,6 +141,10 @@ export const userService = {
     const updated = await userRepository.updateRole(userId, targetRole);
     if (!updated) {
       throw new Error('Failed to update user role');
+    }
+
+    if (targetRole === 'driver') {
+      await driverRepository.findOrCreate(userId);
     }
 
     logger.info('User role promoted via controlled backend mechanism', {

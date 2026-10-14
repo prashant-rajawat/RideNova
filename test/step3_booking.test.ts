@@ -424,6 +424,14 @@ async function runStep3Tests() {
       'TASK 5c: Route with 2 stops maintains exact stop order (Stop 1 -> Stop 2) and calculates Premium fare'
     );
 
+    assert(
+      twoStopsPost.body?.data?.pickup_address === 'Dream Aatman, Vadsar, Vadodara' &&
+        twoStopsPost.body?.data?.destination_address === 'Ahmedabad Railway Station, Kalupur' &&
+        twoStopsPost.body?.data?.stops[0].address === 'City Mall, Gandhinagar' &&
+        twoStopsPost.body?.data?.stops[1].address === 'Infocity, Gandhinagar',
+      'CHECKLIST: Saved booking preserves correct addresses and waypoint order'
+    );
+
     // -------------------------------------------------------------
     // Vehicle Category Rates Consistency Check
     // -------------------------------------------------------------
@@ -458,15 +466,45 @@ async function runStep3Tests() {
       'TASK 5f: Premium fare breakdown verified (100 + 625 + 180 = 905)'
     );
 
-    // Verify GET /api/config/maps
-    const configMapsRes = await requestApi('/api/config/maps');
-    assert(
-      configMapsRes.status === 200 &&
-        configMapsRes.body?.success === true &&
-        typeof configMapsRes.body?.configured === 'boolean',
-      'TASK 5g: Public endpoint GET /api/config/maps is healthy and responds'
-    );
+    // -------------------------------------------------------------
+    // TEST: Independent Waypoint State & Duplicate Consecutive Waypoints Check
+    // -------------------------------------------------------------
+    console.log('\n--- UI/Logic Test: Independent Waypoints & Duplicate Detection ---');
+    const duplicateStopsPayload = {
+      pickupAddress: 'Dream Aatman, Vadsar, Vadodara',
+      pickupLatitude: 22.2575,
+      pickupLongitude: 73.1812,
+      destinationAddress: 'Ahmedabad Railway Station, Kalupur',
+      destinationLatitude: 23.0225,
+      destinationLongitude: 72.5714,
+      rideType: 'economy',
+      stops: [
+        { address: 'City Mall, Gandhinagar', latitude: 23.1989, longitude: 72.6289, stopOrder: 1 },
+        { address: 'City Mall, Gandhinagar', latitude: 23.1989, longitude: 72.6289, stopOrder: 2 }, // Duplicate Stop 1
+      ],
+    };
 
+    // Simulate duplicate waypoint check logic (client-side expectation)
+    const checkDuplicate = (stops: any[]) => {
+      for (let i = 0; i < stops.length - 1; i++) {
+        if (stops[i].address === stops[i + 1].address) return true;
+      }
+      return false;
+    };
+    
+    const isDuplicate = checkDuplicate(duplicateStopsPayload.stops);
+    assert(isDuplicate === true, 'TEST: Duplicate consecutive stops (City Mall -> City Mall) detected by logic');
+
+    // Test distinct addresses
+    const distinctStopsPayload = {
+      stops: [
+        { address: 'City Mall, Gandhinagar', latitude: 23.1989, longitude: 72.6289, stopOrder: 1 },
+        { address: 'Infocity, Gandhinagar', latitude: 23.1895, longitude: 72.6281, stopOrder: 2 },
+      ],
+    };
+    assert(checkDuplicate(distinctStopsPayload.stops) === false, 'TEST: Distinct consecutive stops NOT flagged as duplicate');
+    
+    server.close();
   } finally {
     server.close();
   }

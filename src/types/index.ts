@@ -99,6 +99,8 @@ export interface RideStop {
   created_at: string;
 }
 
+export type RouteSource = 'google_routes_api' | 'fallback_estimate';
+
 export interface RideWithStops {
   id: string;
   rider_id: string;
@@ -115,6 +117,7 @@ export interface RideWithStops {
   final_fare: number | null;
   ride_type: VehicleType;
   status: RideStatus;
+  route_source?: RouteSource | null;
   requested_at: string;
   created_at: string;
   updated_at: string;
@@ -132,6 +135,61 @@ export interface RidesListApiResponse {
   success: boolean;
   data: RideWithStops[];
   count: number;
+}
+
+export interface Vehicle {
+  id: string;
+  driver_id: string;
+  vehicle_type: VehicleType;
+  make: string;
+  model: string;
+  color: string;
+  registration_number: string;
+  year: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DriverProfile {
+  id: string;
+  userId: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  licenseNumber: string;
+  status: DriverStatus;
+  isOnline: boolean;
+  currentLatitude: number | null;
+  currentLongitude: number | null;
+  rating: number;
+  totalRides: number;
+  vehicle: Vehicle | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AvailableRideSummary {
+  id: string;
+  referenceId?: string;
+  pickupAddress: string;
+  pickupLatitude: number;
+  pickupLongitude: number;
+  destinationAddress: string;
+  destinationLatitude: number;
+  destinationLongitude: number;
+  distanceKm: number | null;
+  estimatedDurationMinutes: number | null;
+  estimatedFare: number;
+  estimatedDriverEarnings: number;
+  rideType: VehicleType;
+  status: RideStatus;
+  requestedAt: string;
+  stops: {
+    stopOrder: number;
+    address: string;
+    latitude: number;
+    longitude: number;
+  }[];
 }
 
 

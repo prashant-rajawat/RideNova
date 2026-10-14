@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
-import { User, Mail, Phone, Shield, ArrowLeft, Check, AlertCircle, Save } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { User, Mail, Phone, Shield, ArrowLeft, Check, AlertCircle, Save, Car, CreditCard } from 'lucide-react';
 import { useAuthSession } from '../../context/AuthContext.tsx';
+import { api } from '../../lib/api.ts';
+import { DriverProfile } from '../../types/index.ts';
 
 interface ProfilePageProps {
   onNavigate: (route: string) => void;
@@ -10,9 +12,24 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate }) => {
   const { user, updateProfile } = useAuthSession();
   const [name, setName] = useState(user?.name || '');
   const [phone, setPhone] = useState(user?.phone || '');
+  const [driverProfile, setDriverProfile] = useState<DriverProfile | null>(null);
+  const [licenseNumber, setLicenseNumber] = useState('');
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (user?.role === 'driver') {
+      api.getDriverProfile().then((res) => {
+        if (res.success && res.data) {
+          setDriverProfile(res.data);
+          setLicenseNumber(res.data.licenseNumber || '');
+        }
+      }).catch((err) => {
+        console.error('Failed to load driver profile info:', err);
+      });
+    }
+  }, [user?.role]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,6 +42,13 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate }) => {
         name: name.trim(),
         phone: phone.trim() || undefined,
       });
+
+      if (user?.role === 'driver' && licenseNumber.trim()) {
+        await api.updateDriverProfile({
+          licenseNumber: licenseNumber.trim(),
+        });
+      }
+
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch (err) {
@@ -129,6 +153,22 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate }) => {
             />
           </div>
 
+          {user?.role === 'driver' && (
+            <div>
+              <label className="block text-xs font-medium text-[#8FA6BF] mb-1 flex items-center gap-1.5">
+                <CreditCard className="h-3.5 w-3.5 text-[#00C2FF]" />
+                Driver License Number
+              </label>
+              <input
+                type="text"
+                placeholder="GJ-06-2022-987654"
+                value={licenseNumber}
+                onChange={(e) => setLicenseNumber(e.target.value)}
+                className="w-full rounded-lg border border-[#1E334D] bg-[#07111F] px-3.5 py-2.5 text-xs text-[#E5F2FF] uppercase font-mono focus:border-[#00C2FF] focus:outline-none"
+              />
+            </div>
+          )}
+
           <div>
             <label className="block text-xs font-medium text-[#8FA6BF] mb-1 flex items-center gap-1.5">
               <Shield className="h-3.5 w-3.5 text-[#8FA6BF]" />
@@ -143,6 +183,20 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate }) => {
               </span>
             </div>
           </div>
+
+          {user?.role === 'driver' && driverProfile?.vehicle && (
+            <div className="rounded-lg border border-[#1E334D] bg-[#07111F] p-4 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[#8FA6BF] flex items-center gap-1.5">
+                  <Car className="h-4 w-4 text-[#0EA5E9]" />
+                  <span>Assigned Vehicle:</span>
+                </span>
+                <span className="font-semibold text-[#E5F2FF]">
+                  {driverProfile.vehicle.make} {driverProfile.vehicle.model} ({driverProfile.vehicle.registration_number})
+                </span>
+              </div>
+            </div>
+          )}
 
           <div className="pt-4 border-t border-[#1E334D] flex justify-end gap-3">
             <button

@@ -189,7 +189,7 @@ export default function App() {
                 <div className="max-w-3xl">
                   <div className="inline-flex items-center gap-2 text-xs font-semibold text-[#00C2FF] mb-4 tracking-wide uppercase">
                     <span className="h-1.5 w-1.5 rounded-full bg-[#00C2FF] animate-pulse"></span>
-                    Step 3 Active · Google Maps + Route Planning + Fare Engine + Ride Booking
+                    Step 4 Active · Driver Dashboard + Realtime Requests + Secure Assignment
                   </div>
 
                   <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-[#E5F2FF] leading-[1.15]">
@@ -201,7 +201,7 @@ export default function App() {
                   </p>
 
                   <p className="mt-4 text-base sm:text-lg text-[#8FA6BF] leading-relaxed">
-                    Full-stack cab and ride-booking platform. Step 3 delivers complete rider route planning: multi-stop waypoints, distance & duration computation, dynamic tiered fare calculation, and PostgreSQL ride request creation with status <strong className="text-[#E5F2FF]">requested</strong>.
+                    Full-stack cab and ride-booking platform. Step 4 connects rider bookings with driver dispatch: live availability toggling, incoming request queue with earnings calculations, atomic race-condition safe driver assignment, and trip lifecycle execution.
                   </p>
 
                   {/* Action Buttons */}
@@ -211,15 +211,15 @@ export default function App() {
                       className="flex items-center gap-2.5 rounded-lg bg-[#00C2FF] px-5 py-3 text-sm font-semibold text-[#07111F] shadow-lg shadow-[#00C2FF]/20 hover:bg-[#00C2FF]/90 transition-all active:scale-95"
                     >
                       <Navigation className="h-4 w-4" />
-                      <span>Start Ride Booking (Step 3)</span>
+                      <span>Book a Ride (Rider)</span>
                     </button>
 
                     <button
-                      onClick={() => handleNavigate('rider')}
-                      className="flex items-center gap-2 rounded-lg border border-[#1E334D] bg-[#0F1C2E] px-5 py-3 text-sm font-semibold text-[#E5F2FF] hover:border-[#00C2FF] hover:text-[#00C2FF] transition-all"
+                      onClick={() => handleNavigate('driver')}
+                      className="flex items-center gap-2 rounded-lg border border-[#0EA5E9]/50 bg-[#0EA5E9]/10 px-5 py-3 text-sm font-semibold text-[#00C2FF] hover:bg-[#0EA5E9]/20 transition-all"
                     >
                       <Car className="h-4 w-4" />
-                      <span>Rider Dashboard</span>
+                      <span>Driver Dashboard (Step 4)</span>
                     </button>
 
                     <button

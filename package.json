@@ -11,12 +11,13 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "migrate": "tsx backend/src/db/migrate.ts",
-    "test": "tsx test/foundation.test.ts && tsx test/step2_auth.test.ts && tsx test/step3_booking.test.ts"
+    "test": "tsx test/foundation.test.ts && tsx test/step2_auth.test.ts && tsx test/step3_booking.test.ts && tsx test/step4_driver.test.ts"
   },
   "dependencies": {
     "@clerk/backend": "^3.23.1",
     "@clerk/clerk-react": "^5.61.3",
     "@google/genai": "^2.4.0",
+    "@supabase/supabase-js": "^2.117.3",
     "@tailwindcss/vite": "^4.3.3",
     "@vis.gl/react-google-maps": "^1.10.1",
     "@vitejs/plugin-react": "^6.1.1",

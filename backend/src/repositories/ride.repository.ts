@@ -1,5 +1,5 @@
 import { query, isDatabaseConfigured } from '../db/index.ts';
-import { Ride, RideStop, VehicleType, RideStatus } from '../types/index.ts';
+import { Ride, RideStop, VehicleType, RideStatus, RouteSource } from '../types/index.ts';
 import { logger } from '../utils/logger.ts';
 
 // In-memory fallback stores
@@ -19,6 +19,7 @@ export interface CreateRideDbInput {
   estimated_fare: number;
   ride_type: VehicleType;
   status?: RideStatus;
+  route_source?: RouteSource | null;
 }
 
 export interface CreateStopDbInput {
@@ -136,6 +137,7 @@ export const rideRepository = {
       final_fare: null,
       ride_type: rideInput.ride_type,
       status,
+      route_source: rideInput.route_source || 'fallback_estimate',
       requested_at: now,
       accepted_at: null,
       started_at: null,
@@ -254,5 +256,326 @@ export const rideRepository = {
     }
 
     return results.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  },
+
+  /**
+   * Find available ride requests for online drivers (status = 'requested', driver_id = null)
+   */
+  async findAvailableRequests(
+    vehicleType?: VehicleType,
+    excludeRideIds: string[] = []
+  ): Promise<RideWithStops[]> {
+    const excludeSet = new Set(excludeRideIds);
+
+    if (isDatabaseConfigured()) {
+      try {
+        let sql = `SELECT * FROM rides WHERE status = 'requested' AND driver_id IS NULL`;
+        const params: unknown[] = [];
+
+        if (vehicleType) {
+          params.push(vehicleType);
+          sql += ` AND ride_type = $${params.length}`;
+        }
+
+        sql += ` ORDER BY created_at DESC LIMIT 50`;
+
+        const ridesRes = await query<Ride>(sql, params);
+        const results: RideWithStops[] = [];
+
+        for (const ride of ridesRes.rows) {
+          if (excludeSet.has(ride.id)) continue;
+
+          const stopsRes = await query<RideStop>(
+            `SELECT * FROM ride_stops WHERE ride_id = $1 ORDER BY stop_order ASC`,
+            [ride.id]
+          );
+
+          const shortRef = `RN-${new Date(ride.created_at).toISOString().slice(0, 10).replace(/-/g, '')}-${ride.id.slice(0, 6).toUpperCase()}`;
+          results.push({
+            ...ride,
+            stops: stopsRes.rows,
+            reference_id: shortRef,
+          });
+        }
+
+        return results;
+      } catch (error) {
+        logger.error('Error finding available requests', {
+          error: (error as Error).message,
+        });
+        throw error;
+      }
+    }
+
+    // Memory fallback
+    const results: RideWithStops[] = [];
+    for (const ride of memoryRides.values()) {
+      if (ride.status === 'requested' && !ride.driver_id && !excludeSet.has(ride.id)) {
+        if (!vehicleType || ride.ride_type === vehicleType) {
+          const stops = memoryRideStops.get(ride.id) || [];
+          const shortRef = `RN-${new Date(ride.created_at).toISOString().slice(0, 10).replace(/-/g, '')}-${ride.id.slice(-6).toUpperCase()}`;
+          results.push({
+            ...ride,
+            stops,
+            reference_id: shortRef,
+          });
+        }
+      }
+    }
+
+    return results.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  },
+
+  /**
+   * Atomically assign a driver to a requested ride.
+   * Returns null if ride was already taken, cancelled, or not in 'requested' status.
+   */
+  async acceptRide(rideId: string, driverId: string): Promise<RideWithStops | null> {
+    if (isDatabaseConfigured()) {
+      try {
+        const res = await query<Ride>(
+          `UPDATE rides 
+           SET status = 'accepted', driver_id = $1, accepted_at = NOW(), updated_at = NOW()
+           WHERE id = $2 AND status = 'requested' AND driver_id IS NULL
+           RETURNING *`,
+          [driverId, rideId]
+        );
+
+        if (res.rows.length === 0) {
+          return null; // Atomic conflict: ride already taken or status no longer requested
+        }
+
+        const acceptedRide = res.rows[0];
+        const stopsRes = await query<RideStop>(
+          `SELECT * FROM ride_stops WHERE ride_id = $1 ORDER BY stop_order ASC`,
+          [acceptedRide.id]
+        );
+
+        const shortRef = `RN-${new Date(acceptedRide.created_at).toISOString().slice(0, 10).replace(/-/g, '')}-${acceptedRide.id.slice(0, 6).toUpperCase()}`;
+        return {
+          ...acceptedRide,
+          stops: stopsRes.rows,
+          reference_id: shortRef,
+        };
+      } catch (error) {
+        logger.error('Error during atomic ride assignment in PostgreSQL', {
+          error: (error as Error).message,
+          rideId,
+          driverId,
+        });
+        throw error;
+      }
+    }
+
+    // Memory fallback atomic check
+    const ride = memoryRides.get(rideId);
+    if (!ride || ride.status !== 'requested' || ride.driver_id !== null) {
+      return null;
+    }
+
+    const now = new Date().toISOString();
+    ride.status = 'accepted';
+    ride.driver_id = driverId;
+    ride.accepted_at = now;
+    ride.updated_at = now;
+    memoryRides.set(rideId, ride);
+
+    const stops = memoryRideStops.get(rideId) || [];
+    const shortRef = `RN-${new Date(ride.created_at).toISOString().slice(0, 10).replace(/-/g, '')}-${ride.id.slice(-6).toUpperCase()}`;
+
+    return {
+      ...ride,
+      stops,
+      reference_id: shortRef,
+    };
+  },
+
+  /**
+   * Find current active ride for a driver
+   */
+  async findActiveRideForDriver(driverId: string): Promise<RideWithStops | null> {
+    const activeStatuses: RideStatus[] = ['accepted', 'driver_arriving', 'driver_arrived', 'ride_started'];
+
+    if (isDatabaseConfigured()) {
+      try {
+        const res = await query<Ride>(
+          `SELECT * FROM rides 
+           WHERE driver_id = $1 AND status IN ('accepted', 'driver_arriving', 'driver_arrived', 'ride_started')
+           ORDER BY updated_at DESC LIMIT 1`,
+          [driverId]
+        );
+
+        if (res.rows.length === 0) return null;
+
+        const ride = res.rows[0];
+        const stopsRes = await query<RideStop>(
+          `SELECT * FROM ride_stops WHERE ride_id = $1 ORDER BY stop_order ASC`,
+          [ride.id]
+        );
+
+        const shortRef = `RN-${new Date(ride.created_at).toISOString().slice(0, 10).replace(/-/g, '')}-${ride.id.slice(0, 6).toUpperCase()}`;
+        return {
+          ...ride,
+          stops: stopsRes.rows,
+          reference_id: shortRef,
+        };
+      } catch (error) {
+        logger.error('Error finding active ride for driver', {
+          error: (error as Error).message,
+          driverId,
+        });
+        throw error;
+      }
+    }
+
+    for (const ride of memoryRides.values()) {
+      if (ride.driver_id === driverId && activeStatuses.includes(ride.status)) {
+        const stops = memoryRideStops.get(ride.id) || [];
+        const shortRef = `RN-${new Date(ride.created_at).toISOString().slice(0, 10).replace(/-/g, '')}-${ride.id.slice(-6).toUpperCase()}`;
+        return {
+          ...ride,
+          stops,
+          reference_id: shortRef,
+        };
+      }
+    }
+
+    return null;
+  },
+
+  /**
+   * Update ride status by assigned driver
+   */
+  async updateRideStatus(
+    rideId: string,
+    driverId: string,
+    newStatus: RideStatus,
+    cancellationReason?: string
+  ): Promise<RideWithStops | null> {
+    const now = new Date().toISOString();
+
+    if (isDatabaseConfigured()) {
+      try {
+        let setQuery = `status = $1, updated_at = NOW()`;
+        const params: unknown[] = [newStatus, rideId, driverId];
+
+        if (newStatus === 'ride_started') {
+          setQuery += `, started_at = NOW()`;
+        } else if (newStatus === 'ride_completed') {
+          setQuery += `, completed_at = NOW()`;
+        } else if (newStatus === 'cancelled') {
+          params.push(cancellationReason || 'Cancelled by driver');
+          setQuery += `, cancelled_at = NOW(), cancellation_reason = $4`;
+        }
+
+        const res = await query<Ride>(
+          `UPDATE rides SET ${setQuery} WHERE id = $2 AND driver_id = $3 RETURNING *`,
+          params
+        );
+
+        if (res.rows.length === 0) return null;
+
+        const ride = res.rows[0];
+        const stopsRes = await query<RideStop>(
+          `SELECT * FROM ride_stops WHERE ride_id = $1 ORDER BY stop_order ASC`,
+          [ride.id]
+        );
+
+        const shortRef = `RN-${new Date(ride.created_at).toISOString().slice(0, 10).replace(/-/g, '')}-${ride.id.slice(0, 6).toUpperCase()}`;
+        return {
+          ...ride,
+          stops: stopsRes.rows,
+          reference_id: shortRef,
+        };
+      } catch (error) {
+        logger.error('Error updating ride status in PostgreSQL', {
+          error: (error as Error).message,
+          rideId,
+          newStatus,
+        });
+        throw error;
+      }
+    }
+
+    const ride = memoryRides.get(rideId);
+    if (!ride || ride.driver_id !== driverId) return null;
+
+    ride.status = newStatus;
+    ride.updated_at = now;
+    if (newStatus === 'ride_started') ride.started_at = now;
+    if (newStatus === 'ride_completed') ride.completed_at = now;
+    if (newStatus === 'cancelled') {
+      ride.cancelled_at = now;
+      ride.cancellation_reason = cancellationReason || 'Cancelled by driver';
+    }
+
+    memoryRides.set(rideId, ride);
+
+    const stops = memoryRideStops.get(rideId) || [];
+    const shortRef = `RN-${new Date(ride.created_at).toISOString().slice(0, 10).replace(/-/g, '')}-${ride.id.slice(-6).toUpperCase()}`;
+
+    return {
+      ...ride,
+      stops,
+      reference_id: shortRef,
+    };
+  },
+
+  /**
+   * Find all rides completed or handled by this driver
+   */
+  async findByDriverId(driverId: string): Promise<RideWithStops[]> {
+    if (isDatabaseConfigured()) {
+      try {
+        const res = await query<Ride>(
+          `SELECT * FROM rides WHERE driver_id = $1 ORDER BY created_at DESC`,
+          [driverId]
+        );
+
+        const results: RideWithStops[] = [];
+        for (const ride of res.rows) {
+          const stopsRes = await query<RideStop>(
+            `SELECT * FROM ride_stops WHERE ride_id = $1 ORDER BY stop_order ASC`,
+            [ride.id]
+          );
+          const shortRef = `RN-${new Date(ride.created_at).toISOString().slice(0, 10).replace(/-/g, '')}-${ride.id.slice(0, 6).toUpperCase()}`;
+          results.push({
+            ...ride,
+            stops: stopsRes.rows,
+            reference_id: shortRef,
+          });
+        }
+        return results;
+      } catch (error) {
+        logger.error('Error finding rides by driver ID', {
+          error: (error as Error).message,
+          driverId,
+        });
+        throw error;
+      }
+    }
+
+    const results: RideWithStops[] = [];
+    for (const ride of memoryRides.values()) {
+      if (ride.driver_id === driverId) {
+        const stops = memoryRideStops.get(ride.id) || [];
+        const shortRef = `RN-${new Date(ride.created_at).toISOString().slice(0, 10).replace(/-/g, '')}-${ride.id.slice(-6).toUpperCase()}`;
+        results.push({
+          ...ride,
+          stops,
+          reference_id: shortRef,
+        });
+      }
+    }
+
+    return results.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  },
+
+  /**
+   * Reset in-memory ride store (used in tests)
+   */
+  clearMemoryStore(): void {
+    memoryRides.clear();
+    memoryRideStops.clear();
   },
 };

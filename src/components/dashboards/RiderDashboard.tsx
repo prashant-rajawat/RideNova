@@ -20,6 +20,7 @@ import {
 import { useAuthSession } from '../../context/AuthContext.tsx';
 import { RideWithStops } from '../../types/index.ts';
 import { api } from '../../lib/api.ts';
+import { useRideSubscription } from '../../hooks/useRideSubscription.ts';
 
 interface RiderDashboardProps {
   onNavigate: (route: string) => void;
@@ -47,12 +48,12 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({ onNavigate }) =>
     }
   };
 
-  useEffect(() => {
-    fetchRides();
-  }, []);
-
   const activeRide = rides.find((r) => r.status === 'requested');
+
+  useRideSubscription(activeRide?.id || '', fetchRides);
+
   const completedOrPastRides = rides.filter((r) => r.id !== activeRide?.id);
+
 
   const navItems = [
     { id: 'home', label: 'Home', icon: Home },
