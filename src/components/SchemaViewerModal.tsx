@@ -209,25 +209,25 @@ export const SchemaViewerModal: React.FC<SchemaViewerModalProps> = ({ isOpen, on
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
-      <div className="relative w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-xl border border-[#1E334D] bg-[#0F1C2E] shadow-2xl flex flex-col">
+      <div className="relative w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-xl border border-[#E5E5E5] bg-[#FFFFFF] shadow-2xl flex flex-col">
         {/* Modal Header */}
-        <div className="flex items-center justify-between border-b border-[#1E334D] px-6 py-4 bg-[#07111F]">
+        <div className="flex items-center justify-between border-b border-[#E5E5E5] px-6 py-4 bg-[#FFFFFF]">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#00C2FF]/10 text-[#00C2FF]">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#E21D2B]/10 text-[#E21D2B]">
               <Database className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-[#E5F2FF]">
+              <h3 className="text-base font-bold text-[#171717]">
                 Supabase PostgreSQL Schema Reference
               </h3>
-              <p className="text-xs text-[#8FA6BF]">
+              <p className="text-xs text-[#737373]">
                 All 11 Core Models Defined for Step 1 · Migration 001_initial_schema.sql
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-2 text-[#8FA6BF] hover:bg-[#1E334D] hover:text-[#E5F2FF] transition-colors"
+            className="rounded-lg p-2 text-[#737373] hover:bg-[#E5E5E5] hover:text-[#171717] transition-colors"
           >
             <X className="h-5 w-5" />
           </button>
@@ -236,8 +236,8 @@ export const SchemaViewerModal: React.FC<SchemaViewerModalProps> = ({ isOpen, on
         {/* Modal Body */}
         <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
           {/* Table Selector Sidebar */}
-          <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-[#1E334D] bg-[#07111F]/50 p-3 overflow-y-auto max-h-48 md:max-h-full">
-            <span className="block px-3 py-2 text-[11px] font-semibold text-[#8FA6BF] uppercase tracking-wider">
+          <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-[#E5E5E5] bg-[#FFFFFF]/50 p-3 overflow-y-auto max-h-48 md:max-h-full">
+            <span className="block px-3 py-2 text-[11px] font-semibold text-[#737373] uppercase tracking-wider">
               Tables (11 Required)
             </span>
             <div className="space-y-1">
@@ -247,12 +247,12 @@ export const SchemaViewerModal: React.FC<SchemaViewerModalProps> = ({ isOpen, on
                   onClick={() => setSelectedTable(t.name)}
                   className={`w-full flex items-center justify-between px-3 py-2 text-xs rounded-lg text-left transition-colors ${
                     selectedTable === t.name
-                      ? 'bg-[#00C2FF]/15 text-[#00C2FF] font-semibold border border-[#00C2FF]/30'
-                      : 'text-[#8FA6BF] hover:bg-[#1E334D]/40 hover:text-[#E5F2FF]'
+                      ? 'bg-[#E21D2B]/15 text-[#E21D2B] font-semibold border border-[#E21D2B]/30'
+                      : 'text-[#737373] hover:bg-[#E5E5E5]/40 hover:text-[#171717]'
                   }`}
                 >
                   <span className="font-mono">{t.name}</span>
-                  <span className="text-[10px] text-[#8FA6BF]">{idx + 1}</span>
+                  <span className="text-[10px] text-[#737373]">{idx + 1}</span>
                 </button>
               ))}
             </div>
@@ -260,46 +260,46 @@ export const SchemaViewerModal: React.FC<SchemaViewerModalProps> = ({ isOpen, on
 
           {/* Table Details */}
           <div className="flex-1 p-6 overflow-y-auto space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[#1E334D]">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[#E5E5E5]">
               <div>
                 <div className="flex items-center gap-2">
-                  <h4 className="text-lg font-mono font-bold text-[#00C2FF]">{current.name}</h4>
-                  <span className="text-xs text-[#8FA6BF]">·</span>
-                  <span className="text-xs text-[#8FA6BF]">{current.category}</span>
+                  <h4 className="text-lg font-mono font-bold text-[#E21D2B]">{current.name}</h4>
+                  <span className="text-xs text-[#737373]">·</span>
+                  <span className="text-xs text-[#737373]">{current.category}</span>
                 </div>
-                <p className="mt-1 text-xs text-[#8FA6BF]">{current.description}</p>
+                <p className="mt-1 text-xs text-[#737373]">{current.description}</p>
               </div>
 
               <button
                 onClick={handleCopySqlRef}
-                className="flex items-center gap-1.5 self-start sm:self-auto rounded-lg border border-[#1E334D] bg-[#07111F] px-3 py-1.5 text-xs text-[#8FA6BF] hover:text-[#E5F2FF]"
+                className="flex items-center gap-1.5 self-start sm:self-auto rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] px-3 py-1.5 text-xs text-[#737373] hover:text-[#171717]"
               >
-                {copied ? <Check className="h-3.5 w-3.5 text-[#22C55E]" /> : <Copy className="h-3.5 w-3.5" />}
+                {copied ? <Check className="h-3.5 w-3.5 text-[#15803D]" /> : <Copy className="h-3.5 w-3.5" />}
                 <span>{copied ? 'Copied' : 'SQL Ref'}</span>
               </button>
             </div>
 
             {/* Field Definitions Table */}
             <div>
-              <h5 className="text-xs font-semibold text-[#E5F2FF] mb-2.5 flex items-center gap-1.5">
-                <Key className="h-3.5 w-3.5 text-[#00C2FF]" />
+              <h5 className="text-xs font-semibold text-[#171717] mb-2.5 flex items-center gap-1.5">
+                <Key className="h-3.5 w-3.5 text-[#E21D2B]" />
                 Column Definitions & Constraints
               </h5>
-              <div className="overflow-x-auto rounded-lg border border-[#1E334D] bg-[#07111F]">
+              <div className="overflow-x-auto rounded-lg border border-[#E5E5E5] bg-[#FFFFFF]">
                 <table className="w-full text-left text-xs">
-                  <thead className="border-b border-[#1E334D] bg-[#0F1C2E] text-[11px] text-[#8FA6BF]">
+                  <thead className="border-b border-[#E5E5E5] bg-[#FFFFFF] text-[11px] text-[#737373]">
                     <tr>
                       <th className="px-3.5 py-2.5 font-semibold">Column</th>
                       <th className="px-3.5 py-2.5 font-semibold">Type</th>
                       <th className="px-3.5 py-2.5 font-semibold">Constraints / Rules</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#1E334D]/60 font-mono">
+                  <tbody className="divide-y divide-[#E5E5E5]/60 font-mono">
                     {current.fields.map((f) => (
-                      <tr key={f.name} className="hover:bg-[#1E334D]/20">
-                        <td className="px-3.5 py-2 text-[#E5F2FF] font-medium">{f.name}</td>
-                        <td className="px-3.5 py-2 text-[#0EA5E9]">{f.type}</td>
-                        <td className="px-3.5 py-2 text-[#8FA6BF] font-sans text-[11px]">{f.constraints}</td>
+                      <tr key={f.name} className="hover:bg-[#E5E5E5]/20">
+                        <td className="px-3.5 py-2 text-[#171717] font-medium">{f.name}</td>
+                        <td className="px-3.5 py-2 text-[#E21D2B]">{f.type}</td>
+                        <td className="px-3.5 py-2 text-[#737373] font-sans text-[11px]">{f.constraints}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -309,15 +309,15 @@ export const SchemaViewerModal: React.FC<SchemaViewerModalProps> = ({ isOpen, on
 
             {/* Indexes */}
             <div>
-              <h5 className="text-xs font-semibold text-[#E5F2FF] mb-2 flex items-center gap-1.5">
-                <ShieldCheck className="h-3.5 w-3.5 text-[#22C55E]" />
+              <h5 className="text-xs font-semibold text-[#171717] mb-2 flex items-center gap-1.5">
+                <ShieldCheck className="h-3.5 w-3.5 text-[#15803D]" />
                 Indexes Enforced
               </h5>
               <div className="flex flex-wrap gap-2">
                 {current.indexes.map((idx) => (
                   <span
                     key={idx}
-                    className="font-mono text-[11px] text-[#8FA6BF] bg-[#07111F] px-2.5 py-1 rounded border border-[#1E334D]"
+                    className="font-mono text-[11px] text-[#737373] bg-[#FFFFFF] px-2.5 py-1 rounded border border-[#E5E5E5]"
                   >
                     {idx}
                   </span>
@@ -328,11 +328,11 @@ export const SchemaViewerModal: React.FC<SchemaViewerModalProps> = ({ isOpen, on
         </div>
 
         {/* Modal Footer */}
-        <div className="flex items-center justify-between border-t border-[#1E334D] px-6 py-3 bg-[#07111F] text-xs text-[#8FA6BF]">
+        <div className="flex items-center justify-between border-t border-[#E5E5E5] px-6 py-3 bg-[#FFFFFF] text-xs text-[#737373]">
           <span>Migration file: <code>backend/src/db/migrations/001_initial_schema.sql</code></span>
           <button
             onClick={onClose}
-            className="rounded-lg bg-[#1E334D] px-4 py-1.5 text-xs font-semibold text-[#E5F2FF] hover:bg-[#1E334D]/80"
+            className="rounded-lg bg-[#E5E5E5] px-4 py-1.5 text-xs font-semibold text-[#171717] hover:bg-[#E5E5E5]/80"
           >
             Close
           </button>

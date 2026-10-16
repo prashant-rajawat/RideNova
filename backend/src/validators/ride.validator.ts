@@ -34,6 +34,7 @@ export const createRideSchema = z.object({
     .max(180, 'Destination longitude must be between -180 and 180'),
   rideType: z.enum(['economy', 'comfort', 'premium'] as const),
   stops: z.array(stopSchema).max(3, 'A maximum of 3 intermediate stops are allowed').optional().default([]),
+  scheduledAt: z.string().optional(),
 });
 
 export type CreateRideInput = z.infer<typeof createRideSchema>;

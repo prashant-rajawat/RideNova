@@ -16,14 +16,15 @@ import {
   RefreshCw,
   MapPin,
   ArrowRight,
-  Sparkles,
   Phone,
   Power,
   XCircle,
   ChevronRight,
+  Check,
+  Compass,
 } from 'lucide-react';
 import { useAuthSession } from '../../context/AuthContext.tsx';
-import { api, ApiError } from '../../lib/api.ts';
+import { api } from '../../lib/api.ts';
 import { useRideSubscription } from '../../hooks/useRideSubscription.ts';
 import {
   DriverProfile,
@@ -33,7 +34,7 @@ import {
   RideStatus,
   VehicleType,
 } from '../../types/index.ts';
-import { GoogleMapWrapper } from '../maps/GoogleMapWrapper.tsx';
+import { DashboardLayout } from '../layout/DashboardLayout.tsx';
 
 interface DriverDashboardProps {
   onNavigate: (route: string) => void;
@@ -41,354 +42,252 @@ interface DriverDashboardProps {
 
 export const DriverDashboard: React.FC<DriverDashboardProps> = ({ onNavigate }) => {
   const { user, logout } = useAuthSession();
-  const [activeTab, setActiveTab] = useState<
-    'dashboard' | 'requests' | 'active' | 'history' | 'vehicle' | 'profile'
-  >('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'requests' | 'active' | 'history' | 'vehicle' | 'profile'>('dashboard');
 
-  // Driver profile & vehicle state
+  // Driver data states
   const [profile, setProfile] = useState<DriverProfile | null>(null);
-  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
-  const [isTogglingOnline, setIsTogglingOnline] = useState(false);
-  const [profileMessage, setProfileMessage] = useState<{
-    type: 'success' | 'error';
-    text: string;
-  } | null>(null);
-
-  // Available requests state
+  const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [requests, setRequests] = useState<AvailableRideSummary[]>([]);
-  const [declinedIds, setDeclinedIds] = useState<string[]>([]);
-  const [isLoadingRequests, setIsLoadingRequests] = useState(false);
-  const [acceptingRideId, setAcceptingRideId] = useState<string | null>(null);
-
-  // Active ride state
   const [activeRide, setActiveRide] = useState<RideWithStops | null>(null);
-  const [isLoadingActiveRide, setIsLoadingActiveRide] = useState(false);
-  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [history, setHistory] = useState<RideWithStops[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [actionLoading, setActionLoading] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // History state
-  const [historyRides, setHistoryRides] = useState<RideWithStops[]>([]);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
-
-  // Vehicle form state
-  const [vehicleForm, setVehicleForm] = useState<{
-    vehicleType: VehicleType;
-    make: string;
-    model: string;
-    color: string;
-    registrationNumber: string;
-    year: number;
-  }>({
-    vehicleType: 'comfort',
-    make: '',
-    model: '',
-    color: '',
-    registrationNumber: '',
-    year: new Date().getFullYear(),
+  // Vehicle form
+  const [vehicleForm, setVehicleForm] = useState({
+    vehicleType: 'comfort' as VehicleType,
+    make: 'Toyota',
+    model: 'Camry Hybrid',
+    color: 'Pearl White',
+    registrationNumber: 'DL-01-RN-2026',
+    year: 2024,
   });
-  const [isSavingVehicle, setIsSavingVehicle] = useState(false);
-  const [vehicleMessage, setVehicleMessage] = useState<{
-    type: 'success' | 'error';
-    text: string;
-  } | null>(null);
 
-  // Driver profile edit form state
-  const [driverLicenseForm, setDriverLicenseForm] = useState('');
-  const [driverPhoneForm, setDriverPhoneForm] = useState('');
-  const [isSavingDriverProfile, setIsSavingDriverProfile] = useState(false);
+  // Profile form
+  const [profileForm, setProfileForm] = useState({
+    name: user?.name || '',
+    phone: user?.phone || '+91 98765 43210',
+    licenseNumber: 'DL-98202400918',
+  });
 
-  // 1. Fetch Driver Profile & Active Ride
+  const clearMessages = () => {
+    setErrorMessage(null);
+    setSuccessMessage(null);
+  };
+
+  const showSuccess = (msg: string) => {
+    setSuccessMessage(msg);
+    setTimeout(() => setSuccessMessage(null), 4000);
+  };
+
+  const showError = (msg: string) => {
+    setErrorMessage(msg);
+    setTimeout(() => setErrorMessage(null), 5000);
+  };
+
+  // Fetch driver profile & active ride
   const loadDriverData = useCallback(async () => {
     try {
-      setIsLoadingProfile(true);
-      const res = await api.getDriverProfile();
-      if (res.success && res.data) {
-        setProfile(res.data);
-        setDriverLicenseForm(res.data.licenseNumber || '');
-        setDriverPhoneForm(res.data.phone || '');
-        if (res.data.vehicle) {
+      setLoading(true);
+      const [profileRes, activeRes, historyRes] = await Promise.all([
+        api.getDriverProfile().catch(() => null),
+        api.getDriverActiveRide().catch(() => null),
+        api.getDriverHistory().catch(() => null),
+      ]);
+
+      if (profileRes?.data) {
+        setProfile(profileRes.data);
+        if (profileRes.data.vehicle) {
+          setVehicle(profileRes.data.vehicle);
           setVehicleForm({
-            vehicleType: res.data.vehicle.vehicle_type,
-            make: res.data.vehicle.make,
-            model: res.data.vehicle.model,
-            color: res.data.vehicle.color,
-            registrationNumber: res.data.vehicle.registration_number,
-            year: res.data.vehicle.year,
+            vehicleType: profileRes.data.vehicle.vehicle_type,
+            make: profileRes.data.vehicle.make,
+            model: profileRes.data.vehicle.model,
+            color: profileRes.data.vehicle.color,
+            registrationNumber: profileRes.data.vehicle.registration_number,
+            year: profileRes.data.vehicle.year,
           });
         }
+        setProfileForm({
+          name: profileRes.data.name || user?.name || '',
+          phone: profileRes.data.phone || '',
+          licenseNumber: profileRes.data.licenseNumber || '',
+        });
       }
-    } catch (err) {
-      console.error('Failed to load driver profile:', err);
-    } finally {
-      setIsLoadingProfile(false);
-    }
-  }, []);
 
-  const loadActiveRide = useCallback(async () => {
-    try {
-      setIsLoadingActiveRide(true);
-      const res = await api.getDriverActiveRide();
-      if (res.success) {
-        setActiveRide(res.data);
+      if (activeRes?.data) {
+        setActiveRide(activeRes.data);
+      } else {
+        setActiveRide(null);
       }
-    } catch (err) {
-      console.error('Failed to load active ride:', err);
-    } finally {
-      setIsLoadingActiveRide(false);
-    }
-  }, []);
 
+      if (historyRes?.data) {
+        setHistory(historyRes.data);
+      }
+    } catch (err: any) {
+      showError(err.message || 'Failed to load driver profile');
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+
+  // Load available requests when online
   const loadRequests = useCallback(async () => {
     try {
-      setIsLoadingRequests(true);
-      const res = await api.getDriverRequests(declinedIds);
+      const res = await api.getDriverRequests();
       if (res.success && res.data) {
         setRequests(res.data);
       }
-    } catch (err) {
-      console.error('Failed to load available requests:', err);
-    } finally {
-      setIsLoadingRequests(false);
-    }
-  }, [declinedIds]);
-
-  const loadHistory = useCallback(async () => {
-    try {
-      setIsLoadingHistory(true);
-      const res = await api.getDriverHistory();
-      if (res.success && res.data) {
-        setHistoryRides(res.data);
-      }
-    } catch (err) {
-      console.error('Failed to load driver history:', err);
-    } finally {
-      setIsLoadingHistory(false);
+    } catch {
+      // ignore transient polling errors
     }
   }, []);
 
   useEffect(() => {
     loadDriverData();
-    loadActiveRide();
-  }, [loadDriverData, loadActiveRide]);
-
-  useRideSubscription(activeRide?.id || '', loadActiveRide);
+  }, [loadDriverData]);
 
   useEffect(() => {
-    if (activeTab === 'requests') {
-      loadRequests();
-    } else if (activeTab === 'active') {
-      loadActiveRide();
-    } else if (activeTab === 'history') {
-      loadHistory();
-    }
-  }, [activeTab, loadRequests, loadActiveRide, loadHistory]);
-
-  // Periodic polling for requests if driver is online
-  useEffect(() => {
-    if (profile?.isOnline && activeTab === 'requests') {
-      const interval = setInterval(() => {
-        loadRequests();
-      }, 5000);
-      return () => clearInterval(interval);
-    }
-  }, [profile?.isOnline, activeTab, loadRequests]);
-
-  // Periodic location updates if driver is online
-  useEffect(() => {
-    if (!profile?.isOnline) return;
-
-    const interval = setInterval(async () => {
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          async (position) => {
-            try {
-              await api.updateDriverLocation(
-                position.coords.latitude,
-                position.coords.longitude
-              );
-            } catch (err) {
-              console.error('Failed to update location:', err);
-            }
-          },
-          (err) => console.error('Failed to get location:', err)
-        );
-      }
-    }, 10000); // Every 10 seconds
+    loadRequests();
+    const interval = setInterval(loadRequests, 6000);
     return () => clearInterval(interval);
-  }, [profile?.isOnline]);
+  }, [loadRequests]);
 
-  // Handle Online/Offline Toggle
+  // Real-time subscription to active ride
+  useRideSubscription(activeRide?.id || '', () => {
+    api.getDriverActiveRide().then((res) => {
+      if (res.data) setActiveRide(res.data);
+      else setActiveRide(null);
+    });
+  });
+
+  // Toggle online/offline status
   const handleToggleOnline = async () => {
     if (!profile) return;
-    const targetState = !profile.isOnline;
-    setIsTogglingOnline(true);
-    setProfileMessage(null);
-
+    setActionLoading(true);
+    clearMessages();
     try {
+      const nextOnline = !profile.isOnline;
       const res = await api.setDriverAvailability({
-        isOnline: targetState,
+        isOnline: nextOnline,
+        latitude: profile.currentLatitude || 28.6139,
+        longitude: profile.currentLongitude || 77.209,
       });
-
       if (res.success) {
-        setProfile((prev) => (prev ? { ...prev, isOnline: targetState } : null));
-        setProfileMessage({
-          type: 'success',
-          text: targetState
-            ? 'You are now online! Incoming ride requests will appear in your queue.'
-            : 'You are now offline. Dispatch has been paused.',
-        });
-        if (targetState) {
-          loadRequests();
-        }
+        setProfile({ ...profile, isOnline: nextOnline });
+        showSuccess(nextOnline ? 'You are now ONLINE. Ready for ride requests!' : 'You are now OFFLINE.');
+        if (nextOnline) loadRequests();
       }
-    } catch (err) {
-      const apiErr = err as ApiError;
-      setProfileMessage({
-        type: 'error',
-        text: apiErr.message || 'Unable to update availability status',
-      });
-      // If error mentions vehicle, suggest going to vehicle tab
-      if (apiErr.message?.toLowerCase().includes('vehicle')) {
-        setTimeout(() => {
-          setActiveTab('vehicle');
-        }, 1500);
-      }
+    } catch (err: any) {
+      showError(err.message || 'Failed to update availability status.');
     } finally {
-      setIsTogglingOnline(false);
+      setActionLoading(false);
     }
   };
 
-  // Handle Accepting Ride
-  const handleAcceptRide = async (rideId: string) => {
-    setAcceptingRideId(rideId);
-    setProfileMessage(null);
+  // Simulate GPS location ping
+  const handleUpdateLocation = async () => {
+    setActionLoading(true);
+    clearMessages();
+    try {
+      // Simulate small jitter or movement around current spot
+      const currentLat = profile?.currentLatitude || 28.6139;
+      const currentLng = profile?.currentLongitude || 77.209;
+      const jitterLat = Number((currentLat + (Math.random() - 0.5) * 0.005).toFixed(6));
+      const jitterLng = Number((currentLng + (Math.random() - 0.5) * 0.005).toFixed(6));
 
+      await api.updateDriverLocation(jitterLat, jitterLng);
+      if (profile) {
+        setProfile({ ...profile, currentLatitude: jitterLat, currentLongitude: jitterLng });
+      }
+      showSuccess(`GPS Location synced: ${jitterLat}, ${jitterLng}`);
+    } catch (err: any) {
+      showError(err.message || 'Failed to sync GPS location.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Accept a ride request
+  const handleAcceptRide = async (rideId: string) => {
+    setActionLoading(true);
+    clearMessages();
     try {
       const res = await api.acceptRide(rideId);
       if (res.success && res.data) {
         setActiveRide(res.data);
-        setProfileMessage({
-          type: 'success',
-          text: 'Ride accepted! Navigating to your active ride assignment.',
-        });
-        // Switch to Active Ride tab
         setActiveTab('active');
-        // Refresh requests
+        showSuccess('Ride accepted! Proceed to pickup location.');
         loadRequests();
       }
-    } catch (err) {
-      const apiErr = err as ApiError;
-      if (apiErr.status === 409) {
-        setProfileMessage({
-          type: 'error',
-          text:
-            apiErr.message ||
-            'This ride has already been accepted by another driver! Refreshing list...',
-        });
-      } else {
-        setProfileMessage({
-          type: 'error',
-          text: apiErr.message || 'Failed to accept ride request',
-        });
-      }
+    } catch (err: any) {
+      showError(err.message || 'Ride already accepted by another driver or cancelled.');
       loadRequests();
     } finally {
-      setAcceptingRideId(null);
+      setActionLoading(false);
     }
   };
 
-  // Handle Declining Ride (Local exclusion - does not cancel rider's request)
-  const handleDeclineRide = (rideId: string) => {
-    setDeclinedIds((prev) => [...prev, rideId]);
-    setRequests((prev) => prev.filter((r) => r.id !== rideId));
-  };
-
-  // Handle Ride Lifecycle Status Updates
-  const handleUpdateRideStatus = async (newStatus: RideStatus) => {
+  // Advance ride status
+  const handleUpdateRideStatus = async (status: RideStatus, reason?: string) => {
     if (!activeRide) return;
-    setIsUpdatingStatus(true);
-    setProfileMessage(null);
-
+    setActionLoading(true);
+    clearMessages();
     try {
-      const res = await api.updateRideStatus(activeRide.id, newStatus);
+      const res = await api.updateRideStatus(activeRide.id, status, reason);
       if (res.success && res.data) {
-        if (newStatus === 'ride_completed' || newStatus === 'cancelled') {
+        if (status === 'ride_completed' || status === 'cancelled') {
           setActiveRide(null);
-          setProfileMessage({
-            type: 'success',
-            text:
-              newStatus === 'ride_completed'
-                ? 'Trip completed successfully! Payment calculated & recorded.'
-                : 'Trip was cancelled.',
-          });
+          showSuccess(status === 'ride_completed' ? 'Trip completed successfully! Fare recorded.' : 'Trip cancelled.');
           loadDriverData();
-          loadHistory();
+          setActiveTab('dashboard');
         } else {
           setActiveRide(res.data);
+          showSuccess(`Trip status updated to: ${status.replace('_', ' ').toUpperCase()}`);
         }
       }
-    } catch (err) {
-      const apiErr = err as ApiError;
-      setProfileMessage({
-        type: 'error',
-        text: apiErr.message || 'Failed to update ride status',
-      });
+    } catch (err: any) {
+      showError(err.message || 'Failed to update trip status.');
     } finally {
-      setIsUpdatingStatus(false);
+      setActionLoading(false);
     }
   };
 
-  // Handle Saving Vehicle
+  // Save vehicle
   const handleSaveVehicle = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSavingVehicle(true);
-    setVehicleMessage(null);
-
+    setActionLoading(true);
+    clearMessages();
     try {
       const res = await api.updateDriverVehicle(vehicleForm);
       if (res.success && res.data) {
-        setVehicleMessage({
-          type: 'success',
-          text: 'Vehicle details successfully saved and registered to your driver profile!',
-        });
-        loadDriverData();
+        setVehicle(res.data);
+        showSuccess('Vehicle fleet information saved successfully!');
       }
-    } catch (err) {
-      const apiErr = err as ApiError;
-      setVehicleMessage({
-        type: 'error',
-        text: apiErr.message || 'Failed to save vehicle details',
-      });
+    } catch (err: any) {
+      showError(err.message || 'Failed to save vehicle details.');
     } finally {
-      setIsSavingVehicle(false);
+      setActionLoading(false);
     }
   };
 
-  // Handle Saving Driver Profile Info
-  const handleSaveDriverProfile = async (e: React.FormEvent) => {
+  // Save profile
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSavingDriverProfile(true);
-    setProfileMessage(null);
-
+    setActionLoading(true);
+    clearMessages();
     try {
-      const res = await api.updateDriverProfile({
-        phone: driverPhoneForm.trim() || undefined,
-        licenseNumber: driverLicenseForm.trim() || undefined,
-      });
-      if (res.success) {
+      const res = await api.updateDriverProfile(profileForm);
+      if (res.success && res.data) {
         setProfile(res.data);
-        setProfileMessage({
-          type: 'success',
-          text: 'Driver profile updated successfully.',
-        });
+        showSuccess('Driver profile updated successfully!');
       }
-    } catch (err) {
-      const apiErr = err as ApiError;
-      setProfileMessage({
-        type: 'error',
-        text: apiErr.message || 'Failed to update driver profile',
-      });
+    } catch (err: any) {
+      showError(err.message || 'Failed to update driver profile.');
     } finally {
-      setIsSavingDriverProfile(false);
+      setActionLoading(false);
     }
   };
 
@@ -406,974 +305,753 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({ onNavigate }) 
       icon: Car,
       highlight: Boolean(activeRide),
     },
-    { id: 'history', label: 'Ride History', icon: History },
+    { id: 'history', label: 'Ride History', icon: History, badge: history.length },
     { id: 'vehicle', label: 'Vehicle Fleet', icon: Settings },
     { id: 'profile', label: 'Driver Profile', icon: User },
   ];
 
+  const totalEarnings = history
+    .filter((r) => r.status === 'ride_completed')
+    .reduce((acc, r) => acc + (r.final_fare ? Number(r.final_fare) : Number(r.estimated_fare)) * 0.85, 0);
+
   return (
-    <div className="min-h-[85vh] flex flex-col md:flex-row gap-6 p-4 md:p-8 max-w-7xl mx-auto w-full">
-      {/* Sidebar Navigation */}
-      <aside className="w-full md:w-64 shrink-0 rounded-xl border border-[#1E334D] bg-[#0F1C2E] p-4 flex flex-col justify-between shadow-sm">
-        <div className="space-y-6">
-          <div className="pb-4 border-b border-[#1E334D]">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[#00C2FF] to-[#0EA5E9] text-[#07111F] font-black text-sm">
-                RN
-              </div>
-              <span className="text-lg font-extrabold text-[#E5F2FF]">RideNova</span>
-            </div>
-            <div className="mt-3 flex items-center justify-between">
-              <span className="text-xs text-[#8FA6BF]">Fleet Status</span>
-              <span
-                className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold tracking-wider ${
-                  profile?.isOnline
-                    ? 'bg-[#22C55E]/15 text-[#22C55E] border border-[#22C55E]/30'
-                    : 'bg-[#8FA6BF]/15 text-[#8FA6BF] border border-[#8FA6BF]/30'
-                }`}
-              >
-                {profile?.isOnline ? 'ONLINE' : 'OFFLINE'}
-              </span>
-            </div>
+    <DashboardLayout
+      role="DRIVER"
+      navItems={navItems}
+      activeTab={activeTab}
+      setActiveTab={(tab) => setActiveTab(tab as typeof activeTab)}
+      user={user}
+      logout={logout}
+    >
+      {/* Top Banner: Status & Quick Controls */}
+      <div className="pb-6 border-b border-[#E5E5E5] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wider text-[#E21D2B]">Driver Portal</span>
+            <span className="text-xs text-[#737373]">·</span>
+            <span
+              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-bold ${
+                profile?.isOnline
+                  ? 'bg-[#15803D]/10 text-[#15803D] border border-[#15803D]/30'
+                  : 'bg-[#737373]/10 text-[#737373] border border-[#737373]/30'
+              }`}
+            >
+              <span className={`h-2 w-2 rounded-full ${profile?.isOnline ? 'bg-[#15803D] animate-pulse' : 'bg-[#737373]'}`} />
+              {profile?.isOnline ? 'ONLINE & ACCEPTING' : 'OFFLINE'}
+            </span>
+            <span className="text-xs text-[#737373]">·</span>
+            <span className="text-xs text-[#15803D] font-semibold flex items-center gap-1">
+              <ShieldCheck className="h-3.5 w-3.5" />
+              Verified Driver
+            </span>
           </div>
-
-          <nav className="space-y-1">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = activeTab === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setActiveTab(item.id as typeof activeTab)}
-                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-medium transition-colors ${
-                    isActive
-                      ? 'bg-[#0EA5E9]/15 text-[#00C2FF] border border-[#00C2FF]/30 font-semibold'
-                      : 'text-[#8FA6BF] hover:bg-[#1E334D]/40 hover:text-[#E5F2FF]'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <Icon className="h-4 w-4" />
-                    <span>{item.label}</span>
-                  </div>
-                  {item.badge !== undefined && (
-                    <span className="rounded-full bg-[#00C2FF] px-1.5 py-0.2 text-[10px] font-bold text-[#07111F]">
-                      {item.badge}
-                    </span>
-                  )}
-                  {item.highlight && (
-                    <span className="h-2 w-2 rounded-full bg-[#22C55E] animate-ping" />
-                  )}
-                </button>
-              );
-            })}
-          </nav>
+          <h1 className="mt-1 text-2xl font-extrabold text-[#171717]">
+            {profile?.name || user?.name || 'Driver Console'}
+          </h1>
+          <p className="mt-1 text-xs text-[#737373]">
+            Accept incoming ride requests, track live trip progress, and monitor earnings.
+          </p>
         </div>
 
-        <div className="pt-4 border-t border-[#1E334D] space-y-3">
-          <div className="flex items-center gap-3 px-1">
-            <div className="h-8 w-8 rounded-full bg-[#1E334D] border border-[#00C2FF]/30 flex items-center justify-center text-xs font-bold text-[#00C2FF]">
-              {user?.name?.charAt(0) || 'D'}
-            </div>
-            <div className="truncate">
-              <p className="text-xs font-semibold text-[#E5F2FF] truncate">{user?.name}</p>
-              <p className="text-[11px] text-[#8FA6BF] truncate">{profile?.licenseNumber || 'Driver Partner'}</p>
-            </div>
-          </div>
+        {/* Online / Offline Switch & Location Ping Button */}
+        <div className="flex items-center gap-2.5 self-start sm:self-auto">
           <button
-            onClick={logout}
-            className="w-full flex items-center justify-center gap-2 rounded-lg border border-[#1E334D] bg-[#07111F] py-2 text-xs font-medium text-[#EF4444] hover:bg-[#EF4444]/10 transition-colors"
+            onClick={handleUpdateLocation}
+            disabled={actionLoading}
+            title="Send live GPS coordinates ping"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] hover:bg-[#FAFAFA] text-xs font-medium text-[#171717] transition-all"
           >
-            <LogOut className="h-3.5 w-3.5" />
-            <span>Sign Out</span>
+            <Compass className="h-3.5 w-3.5 text-[#E21D2B]" />
+            <span className="hidden md:inline">Sync GPS</span>
           </button>
-        </div>
-      </aside>
 
-      {/* Main Content Area */}
-      <main className="flex-1 rounded-xl border border-[#1E334D] bg-[#0F1C2E] p-6 shadow-sm flex flex-col">
-        {/* Global Alert Notification */}
-        {profileMessage && (
-          <div
-            className={`mb-5 flex items-center justify-between rounded-lg p-3 text-xs border ${
-              profileMessage.type === 'success'
-                ? 'bg-[#22C55E]/10 border-[#22C55E]/30 text-[#22C55E]'
-                : 'bg-[#EF4444]/10 border-[#EF4444]/30 text-[#EF4444]'
+          <button
+            onClick={handleToggleOnline}
+            disabled={actionLoading}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-sm ${
+              profile?.isOnline
+                ? 'bg-[#15803D] hover:bg-[#15803D]/90 text-[#FFFFFF]'
+                : 'bg-[#E21D2B] hover:bg-[#E21D2B]/90 text-[#FFFFFF]'
             }`}
           >
-            <div className="flex items-center gap-2">
-              {profileMessage.type === 'success' ? (
-                <CheckCircle2 className="h-4 w-4 shrink-0" />
-              ) : (
-                <AlertCircle className="h-4 w-4 shrink-0" />
-              )}
-              <span>{profileMessage.text}</span>
-            </div>
-            <button
-              onClick={() => setProfileMessage(null)}
-              className="text-xs underline ml-2 opacity-80 hover:opacity-100"
-            >
-              Dismiss
-            </button>
-          </div>
-        )}
-
-        {/* Top Header & Availability Switch */}
-        <div className="pb-6 border-b border-[#1E334D] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold uppercase tracking-wider text-[#00C2FF]">
-                Step 4 · Fleet Dispatch Engine
-              </span>
-              <span className="text-xs text-[#8FA6BF]">·</span>
-              <span className="text-xs text-[#22C55E] flex items-center gap-1 font-mono">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#22C55E]"></span>
-                Driver Role Verified
-              </span>
-            </div>
-            <h1 className="mt-1 text-2xl font-extrabold text-[#E5F2FF]">
-              Welcome back, {user?.name || 'Driver Partner'}
-            </h1>
-            <p className="mt-1 text-xs text-[#8FA6BF]">
-              Manage ride assignments, toggle fleet availability, and update vehicle records.
-            </p>
-          </div>
-
-          {/* Quick Online/Offline Switch */}
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleToggleOnline}
-              disabled={isTogglingOnline || isLoadingProfile}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all ${
-                profile?.isOnline
-                  ? 'bg-[#22C55E] text-[#07111F] hover:bg-[#22C55E]/90 shadow-md shadow-[#22C55E]/20'
-                  : 'bg-[#1E334D] text-[#E5F2FF] hover:bg-[#1E334D]/80 border border-[#8FA6BF]/30'
-              } disabled:opacity-50`}
-            >
-              <Power className={`h-4 w-4 ${isTogglingOnline ? 'animate-spin' : ''}`} />
-              <span>{profile?.isOnline ? 'Go Offline' : 'Go Online'}</span>
-            </button>
-          </div>
+            <Power className="h-3.5 w-3.5" />
+            <span>{profile?.isOnline ? 'Go Offline' : 'Go Online Now'}</span>
+          </button>
         </div>
+      </div>
 
-        {/* TAB 1: DASHBOARD OVERVIEW */}
-        {activeTab === 'dashboard' && (
-          <div className="mt-6 space-y-6">
-            {/* Active Ride Banner if present */}
-            {activeRide && (
-              <div className="rounded-xl border border-[#00C2FF]/40 bg-gradient-to-r from-[#00C2FF]/10 via-[#0F1C2E] to-[#07111F] p-5 shadow-sm">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-[#00C2FF]/20 text-[#00C2FF] border border-[#00C2FF]/30">
-                        ACTIVE RIDE IN PROGRESS
-                      </span>
-                      <span className="text-xs font-mono text-[#8FA6BF]">
-                        {activeRide.reference_id || activeRide.id.slice(0, 8)}
-                      </span>
-                    </div>
-                    <p className="mt-2 text-sm font-semibold text-[#E5F2FF]">
-                      {activeRide.pickup_address} → {activeRide.destination_address}
-                    </p>
-                    <p className="text-xs text-[#8FA6BF] mt-0.5">
-                      Status:{' '}
-                      <strong className="text-[#00C2FF] uppercase">{activeRide.status}</strong> · Fare:{' '}
-                      <strong className="text-[#22C55E]">₹{activeRide.estimated_fare}</strong>
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setActiveTab('active')}
-                    className="self-start sm:self-auto flex items-center gap-2 rounded-lg bg-[#00C2FF] px-4 py-2 text-xs font-bold text-[#07111F] hover:bg-[#00C2FF]/90 transition-all shadow"
-                  >
-                    <span>Manage Trip</span>
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-            )}
+      {/* Alerts */}
+      {errorMessage && (
+        <div className="mt-4 p-3 rounded-lg bg-[#B91C1C]/10 border border-[#B91C1C]/30 text-xs text-[#B91C1C] flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+          <button onClick={clearMessages} className="text-[#B91C1C] hover:opacity-75">
+            ✕
+          </button>
+        </div>
+      )}
 
-            {/* Metrics Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-              <div className="rounded-lg border border-[#1E334D] bg-[#07111F] p-4">
-                <span className="text-xs text-[#8FA6BF]">Availability</span>
-                <p className="mt-1 text-lg font-bold text-[#E5F2FF]">
-                  {profile?.isOnline ? (
-                    <span className="text-[#22C55E] flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full bg-[#22C55E] animate-pulse"></span>
-                      Online
-                    </span>
-                  ) : (
-                    <span className="text-[#8FA6BF]">Offline</span>
-                  )}
-                </p>
-                <span className="mt-2 text-[11px] text-[#8FA6BF] block">
-                  {profile?.isOnline ? 'Ready for dispatches' : 'Paused in queue'}
-                </span>
-              </div>
+      {successMessage && (
+        <div className="mt-4 p-3 rounded-lg bg-[#15803D]/10 border border-[#15803D]/30 text-xs text-[#15803D] flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            <span>{successMessage}</span>
+          </div>
+          <button onClick={clearMessages} className="text-[#15803D] hover:opacity-75">
+            ✕
+          </button>
+        </div>
+      )}
 
-              <div className="rounded-lg border border-[#1E334D] bg-[#07111F] p-4">
-                <span className="text-xs text-[#8FA6BF]">Registered Fleet Vehicle</span>
-                <p className="mt-1 text-sm font-bold text-[#0EA5E9] truncate">
-                  {profile?.vehicle
-                    ? `${profile.vehicle.make} ${profile.vehicle.model}`
-                    : 'Not Configured'}
-                </p>
-                <span className="mt-2 text-[11px] text-[#8FA6BF] block font-mono">
-                  {profile?.vehicle
-                    ? `${profile.vehicle.vehicle_type.toUpperCase()} · ${profile.vehicle.registration_number}`
-                    : 'Click vehicle tab to setup'}
-                </span>
-              </div>
-
-              <div className="rounded-lg border border-[#1E334D] bg-[#07111F] p-4">
-                <span className="text-xs text-[#8FA6BF]">Driver Rating</span>
-                <div className="mt-1 flex items-center gap-1.5">
-                  <Star className="h-4 w-4 fill-[#F59E0B] text-[#F59E0B]" />
-                  <p className="text-lg font-bold text-[#E5F2FF]">
-                    {profile?.rating ? Number(profile.rating).toFixed(1) : '5.0'}
-                  </p>
-                </div>
-                <span className="mt-2 text-[11px] text-[#8FA6BF] block">Top Partner Standing</span>
-              </div>
-
-              <div className="rounded-lg border border-[#1E334D] bg-[#07111F] p-4">
-                <span className="text-xs text-[#8FA6BF]">Total Completed Rides</span>
-                <p className="mt-1 text-lg font-bold text-[#E5F2FF]">
-                  {profile?.totalRides ?? 0}
-                </p>
-                <span className="mt-2 text-[11px] text-[#22C55E] block font-mono">
-                  Database Verified
-                </span>
-              </div>
+      {/* TAB 1: OVERVIEW */}
+      {activeTab === 'dashboard' && (
+        <div className="mt-6 space-y-6">
+          {/* Quick Metrics */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="rounded-xl border border-[#E5E5E5] bg-[#FFFFFF] p-4 shadow-sm">
+              <span className="text-[11px] font-semibold uppercase text-[#737373]">Net Earnings (85%)</span>
+              <p className="mt-1 text-2xl font-black text-[#15803D]">₹{totalEarnings.toFixed(2)}</p>
+              <span className="text-[10px] text-[#737373] mt-1 block">Platform fee: 15%</span>
             </div>
 
-            {/* Quick Actions & Requests Card */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="rounded-xl border border-[#1E334D] bg-[#07111F] p-5">
-                <div className="flex items-center justify-between pb-3 border-b border-[#1E334D]">
-                  <h3 className="text-sm font-bold text-[#E5F2FF] flex items-center gap-2">
-                    <Navigation className="h-4 w-4 text-[#00C2FF]" />
-                    <span>Incoming Ride Requests</span>
-                  </h3>
-                  <button
-                    onClick={() => setActiveTab('requests')}
-                    className="text-xs text-[#00C2FF] hover:underline flex items-center gap-1"
-                  >
-                    <span>View all</span>
-                    <ChevronRight className="h-3 w-3" />
-                  </button>
-                </div>
-                <div className="mt-4">
-                  {profile?.isOnline ? (
-                    requests.length > 0 ? (
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between text-xs text-[#8FA6BF]">
-                          <span>{requests.length} rides currently awaiting driver</span>
-                          <span className="text-[#22C55E]">Live Queue</span>
-                        </div>
-                        {requests.slice(0, 2).map((req) => (
-                          <div
-                            key={req.id}
-                            className="rounded-lg border border-[#1E334D] bg-[#0F1C2E] p-3 text-xs"
-                          >
-                            <div className="flex items-center justify-between">
-                              <span className="font-semibold text-[#E5F2FF] truncate max-w-[180px]">
-                                {req.pickupAddress}
-                              </span>
-                              <span className="font-bold text-[#22C55E]">
-                                ₹{req.estimatedDriverEarnings} (Est.)
-                              </span>
-                            </div>
-                            <p className="text-[11px] text-[#8FA6BF] mt-1 truncate">
-                              To: {req.destinationAddress}
-                            </p>
-                            <div className="mt-2.5 flex justify-end gap-2">
-                              <button
-                                onClick={() => handleAcceptRide(req.id)}
-                                disabled={Boolean(acceptingRideId)}
-                                className="px-3 py-1 rounded bg-[#00C2FF] text-[#07111F] font-bold text-[11px] hover:bg-[#00C2FF]/90"
-                              >
-                                Accept
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-8 text-xs text-[#8FA6BF]">
-                        <p>No new ride requests right now.</p>
-                        <p className="mt-1 text-[11px]">Rider bookings appear here in real-time.</p>
-                      </div>
-                    )
-                  ) : (
-                    <div className="text-center py-8 text-xs text-[#8FA6BF]">
-                      <Power className="mx-auto h-6 w-6 text-[#8FA6BF] mb-2" />
-                      <p>You are currently offline.</p>
-                      <button
-                        onClick={handleToggleOnline}
-                        className="mt-3 text-xs text-[#00C2FF] hover:underline"
-                      >
-                        Switch Online to view incoming requests
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
+            <div className="rounded-xl border border-[#E5E5E5] bg-[#FFFFFF] p-4 shadow-sm">
+              <span className="text-[11px] font-semibold uppercase text-[#737373]">Completed Rides</span>
+              <p className="mt-1 text-2xl font-black text-[#171717]">{profile?.totalRides || history.length}</p>
+              <span className="text-[10px] text-[#737373] mt-1 block">Verified database count</span>
+            </div>
 
-              <div className="rounded-xl border border-[#1E334D] bg-[#07111F] p-5">
-                <div className="flex items-center justify-between pb-3 border-b border-[#1E334D]">
-                  <h3 className="text-sm font-bold text-[#E5F2FF] flex items-center gap-2">
-                    <Car className="h-4 w-4 text-[#0EA5E9]" />
-                    <span>Fleet Vehicle Status</span>
-                  </h3>
-                  <button
-                    onClick={() => setActiveTab('vehicle')}
-                    className="text-xs text-[#0EA5E9] hover:underline"
-                  >
-                    Edit Vehicle
-                  </button>
-                </div>
-                <div className="mt-4 space-y-3 text-xs">
-                  {profile?.vehicle ? (
-                    <>
-                      <div className="flex justify-between py-1.5 border-b border-[#1E334D]/60">
-                        <span className="text-[#8FA6BF]">Model</span>
-                        <span className="font-semibold text-[#E5F2FF]">
-                          {profile.vehicle.make} {profile.vehicle.model} ({profile.vehicle.year})
-                        </span>
-                      </div>
-                      <div className="flex justify-between py-1.5 border-b border-[#1E334D]/60">
-                        <span className="text-[#8FA6BF]">Category</span>
-                        <span className="font-semibold uppercase text-[#0EA5E9]">
-                          {profile.vehicle.vehicle_type}
-                        </span>
-                      </div>
-                      <div className="flex justify-between py-1.5 border-b border-[#1E334D]/60">
-                        <span className="text-[#8FA6BF]">Registration No.</span>
-                        <span className="font-mono font-semibold text-[#E5F2FF]">
-                          {profile.vehicle.registration_number}
-                        </span>
-                      </div>
-                      <div className="flex justify-between py-1.5">
-                        <span className="text-[#8FA6BF]">Color</span>
-                        <span className="font-semibold text-[#E5F2FF]">{profile.vehicle.color}</span>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="text-center py-8">
-                      <p className="text-[#8FA6BF]">No vehicle configured yet.</p>
-                      <button
-                        onClick={() => setActiveTab('vehicle')}
-                        className="mt-3 rounded-lg bg-[#00C2FF] px-4 py-2 text-xs font-bold text-[#07111F]"
-                      >
-                        Register Vehicle
-                      </button>
-                    </div>
-                  )}
-                </div>
+            <div className="rounded-xl border border-[#E5E5E5] bg-[#FFFFFF] p-4 shadow-sm">
+              <span className="text-[11px] font-semibold uppercase text-[#737373]">Driver Rating</span>
+              <div className="mt-1 flex items-center gap-1.5">
+                <Star className="h-5 w-5 fill-[#B45309] text-[#B45309]" />
+                <span className="text-2xl font-black text-[#171717]">{profile?.rating ? Number(profile.rating).toFixed(1) : '5.0'}</span>
               </div>
+              <span className="text-[10px] text-[#737373] mt-1 block">From passenger ratings</span>
+            </div>
+
+            <div className="rounded-xl border border-[#E5E5E5] bg-[#FFFFFF] p-4 shadow-sm">
+              <span className="text-[11px] font-semibold uppercase text-[#737373]">Fleet Status</span>
+              <p className="mt-1 text-sm font-bold text-[#171717] truncate">
+                {vehicle ? `${vehicle.make} ${vehicle.model}` : 'No Vehicle Registered'}
+              </p>
+              <span className="text-[10px] text-[#E21D2B] mt-1 block font-mono">
+                {vehicle?.registration_number || 'Tap Vehicle tab to add'}
+              </span>
             </div>
           </div>
-        )}
 
-        {/* TAB 2: AVAILABLE RIDE REQUESTS */}
-        {activeTab === 'requests' && (
-          <div className="mt-6 space-y-5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-bold text-[#E5F2FF]">Available Ride Requests</h2>
-                <p className="text-xs text-[#8FA6BF]">
-                  Rider bookings waiting for driver assignment. Review route details before accepting.
-                </p>
+          {/* Active Ride Banner if present */}
+          {activeRide && (
+            <div className="rounded-xl border-2 border-[#E21D2B] bg-[#FFF1F2] p-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#E21D2B]/20">
+                <div className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#E21D2B] animate-ping" />
+                  <span className="text-xs font-black uppercase text-[#E21D2B]">Active Trip In Progress</span>
+                  <span className="text-xs font-mono font-bold text-[#171717]">
+                    {activeRide.reference_id || activeRide.id.slice(0, 8)}
+                  </span>
+                </div>
+                <button
+                  onClick={() => setActiveTab('active')}
+                  className="px-3 py-1.5 rounded-lg bg-[#E21D2B] text-white text-xs font-bold hover:bg-[#BE1622] transition-colors self-start sm:self-auto flex items-center gap-1.5"
+                >
+                  <span>Open Active Ride Console</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                <div>
+                  <span className="text-[#737373] text-[11px] block">Pickup</span>
+                  <span className="font-semibold text-[#171717]">{activeRide.pickup_address}</span>
+                </div>
+                <div>
+                  <span className="text-[#737373] text-[11px] block">Destination</span>
+                  <span className="font-semibold text-[#171717]">{activeRide.destination_address}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Incoming Requests Feed Preview */}
+          <div className="rounded-xl border border-[#E5E5E5] bg-[#FFFFFF] p-5 shadow-sm">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E5E5E5]">
+              <div className="flex items-center gap-2">
+                <Navigation className="h-4 w-4 text-[#E21D2B]" />
+                <h3 className="text-sm font-bold text-[#171717]">Live Ride Requests</h3>
+                <span className="rounded-full bg-[#E21D2B] text-white px-2 py-0.5 text-[10px] font-bold">
+                  {requests.length} Available
+                </span>
               </div>
               <button
                 onClick={loadRequests}
-                disabled={isLoadingRequests}
-                className="flex items-center gap-1.5 rounded-lg border border-[#1E334D] bg-[#07111F] px-3 py-1.5 text-xs text-[#8FA6BF] hover:text-[#E5F2FF] transition-colors"
+                className="text-xs text-[#E21D2B] hover:underline flex items-center gap-1 font-semibold"
               >
-                <RefreshCw className={`h-3.5 w-3.5 ${isLoadingRequests ? 'animate-spin' : ''}`} />
-                <span>Refresh Requests</span>
-              </button>
-            </div>
-
-            {!profile?.isOnline ? (
-              <div className="text-center py-16 border border-dashed border-[#1E334D] rounded-xl bg-[#07111F]/50">
-                <Power className="mx-auto h-8 w-8 text-[#8FA6BF] mb-3" />
-                <h3 className="text-base font-bold text-[#E5F2FF]">You are Currently Offline</h3>
-                <p className="mt-1 text-xs text-[#8FA6BF] max-w-sm mx-auto">
-                  To view live rider bookings and receive nearby trip requests, toggle your driver status to online.
-                </p>
-                <button
-                  onClick={handleToggleOnline}
-                  className="mt-5 rounded-lg bg-[#22C55E] px-4 py-2.5 text-xs font-bold text-[#07111F] hover:bg-[#22C55E]/90"
-                >
-                  Go Online Now
-                </button>
-              </div>
-            ) : requests.length === 0 ? (
-              <div className="text-center py-16 border border-dashed border-[#1E334D] rounded-xl bg-[#07111F]/50">
-                <Navigation className="mx-auto h-8 w-8 text-[#00C2FF] mb-3 opacity-60" />
-                <h3 className="text-base font-bold text-[#E5F2FF]">No Ride Requests Waiting</h3>
-                <p className="mt-1 text-xs text-[#8FA6BF] max-w-sm mx-auto">
-                  When riders create booking requests matching your fleet tier, they will instantly appear here.
-                </p>
-                <button
-                  onClick={loadRequests}
-                  className="mt-4 text-xs text-[#00C2FF] hover:underline"
-                >
-                  Check again
-                </button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 gap-4">
-                {requests.map((req) => (
-                  <div
-                    key={req.id}
-                    className="rounded-xl border border-[#1E334D] bg-[#07111F] p-5 shadow-sm hover:border-[#00C2FF]/40 transition-colors"
-                  >
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-[#1E334D] gap-2">
-                      <div className="flex items-center gap-2.5">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold uppercase bg-[#00C2FF]/15 text-[#00C2FF] border border-[#00C2FF]/30">
-                          {req.rideType}
-                        </span>
-                        <span className="text-xs font-mono text-[#8FA6BF]">
-                          {req.referenceId || req.id.slice(0, 8)}
-                        </span>
-                        {req.stops.length > 0 && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-[#F59E0B]/15 text-[#F59E0B] border border-[#F59E0B]/30">
-                            {req.stops.length} STOPS
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="text-right">
-                        <span className="text-xs text-[#8FA6BF]">Estimated Earnings</span>
-                        <p className="text-base font-extrabold text-[#22C55E]">
-                          ₹{req.estimatedDriverEarnings}{' '}
-                          <span className="text-xs font-normal text-[#8FA6BF]">
-                            (Total Fare: ₹{req.estimatedFare})
-                          </span>
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="py-4 space-y-3">
-                      {/* Pickup */}
-                      <div className="flex items-start gap-3">
-                        <div className="h-5 w-5 rounded-full bg-[#22C55E]/20 text-[#22C55E] flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
-                          P
-                        </div>
-                        <div>
-                          <span className="text-[10px] font-semibold uppercase text-[#8FA6BF]">
-                            Pickup Location
-                          </span>
-                          <p className="text-xs font-medium text-[#E5F2FF]">{req.pickupAddress}</p>
-                        </div>
-                      </div>
-
-                      {/* Stops */}
-                      {req.stops.map((stop) => (
-                        <div key={stop.stopOrder} className="flex items-start gap-3 pl-1">
-                          <div className="h-4 w-4 rounded-full bg-[#F59E0B]/20 text-[#F59E0B] flex items-center justify-center text-[9px] font-bold shrink-0 mt-0.5">
-                            S{stop.stopOrder}
-                          </div>
-                          <div>
-                            <span className="text-[10px] font-semibold uppercase text-[#F59E0B]">
-                              Intermediate Stop {stop.stopOrder}
-                            </span>
-                            <p className="text-xs text-[#E5F2FF]">{stop.address}</p>
-                          </div>
-                        </div>
-                      ))}
-
-                      {/* Destination */}
-                      <div className="flex items-start gap-3">
-                        <div className="h-5 w-5 rounded-full bg-[#EF4444]/20 text-[#EF4444] flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
-                          D
-                        </div>
-                        <div>
-                          <span className="text-[10px] font-semibold uppercase text-[#8FA6BF]">
-                            Destination
-                          </span>
-                          <p className="text-xs font-medium text-[#E5F2FF]">{req.destinationAddress}</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="pt-4 border-t border-[#1E334D] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="flex items-center gap-4 text-xs text-[#8FA6BF]">
-                        <span>Distance: <strong className="text-[#E5F2FF]">{req.distanceKm} km</strong></span>
-                        <span>Duration: <strong className="text-[#E5F2FF]">{req.estimatedDurationMinutes} mins</strong></span>
-                      </div>
-
-                      <div className="flex items-center gap-2.5">
-                        <button
-                          onClick={() => handleDeclineRide(req.id)}
-                          className="px-3.5 py-2 rounded-lg border border-[#1E334D] text-xs font-semibold text-[#8FA6BF] hover:text-[#EF4444] hover:border-[#EF4444]/40 transition-colors"
-                        >
-                          Decline
-                        </button>
-                        <button
-                          onClick={() => handleAcceptRide(req.id)}
-                          disabled={acceptingRideId === req.id}
-                          className="flex items-center gap-2 rounded-lg bg-[#00C2FF] px-5 py-2 text-xs font-bold text-[#07111F] hover:bg-[#00C2FF]/90 transition-all disabled:opacity-50 shadow-md shadow-[#00C2FF]/20"
-                        >
-                          {acceptingRideId === req.id ? (
-                            <>
-                              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                              <span>Assigning...</span>
-                            </>
-                          ) : (
-                            <span>Accept Ride</span>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* TAB 3: ACTIVE RIDE IN PROGRESS */}
-        {activeTab === 'active' && (
-          <div className="mt-6 space-y-6">
-            {!activeRide ? (
-              <div className="text-center py-16 border border-dashed border-[#1E334D] rounded-xl bg-[#07111F]/50">
-                <Car className="mx-auto h-8 w-8 text-[#8FA6BF] mb-3" />
-                <h3 className="text-base font-bold text-[#E5F2FF]">No Active Ride in Progress</h3>
-                <p className="mt-1 text-xs text-[#8FA6BF] max-w-sm mx-auto">
-                  When you accept a ride request from the queue, live navigation and passenger status controls will appear here.
-                </p>
-                <button
-                  onClick={() => setActiveTab('requests')}
-                  className="mt-5 rounded-lg bg-[#00C2FF] px-4 py-2.5 text-xs font-bold text-[#07111F]"
-                >
-                  Browse Available Requests
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-6">
-                {/* Status Progression Bar */}
-                <div className="rounded-xl border border-[#1E334D] bg-[#07111F] p-5">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#1E334D]">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-mono font-bold text-[#00C2FF]">
-                          {activeRide.reference_id || activeRide.id}
-                        </span>
-                        <span className="text-xs text-[#8FA6BF]">·</span>
-                        <span className="text-xs font-bold uppercase text-[#22C55E]">
-                          Status: {activeRide.status.replace(/_/g, ' ')}
-                        </span>
-                      </div>
-                      <h2 className="mt-1 text-lg font-bold text-[#E5F2FF]">
-                        Trip In Progress
-                      </h2>
-                    </div>
-
-                    <div className="text-right">
-                      <span className="text-xs text-[#8FA6BF]">Trip Fare</span>
-                      <p className="text-xl font-black text-[#22C55E]">
-                        ₹{activeRide.estimated_fare}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Lifecycle Controls */}
-                  <div className="pt-4 flex flex-wrap items-center justify-between gap-3">
-                    <div className="text-xs text-[#8FA6BF]">
-                      {activeRide.status === 'accepted' && (
-                        <span>Next step: Drive to passenger pickup location</span>
-                      )}
-                      {activeRide.status === 'driver_arriving' && (
-                        <span>Next step: Notify passenger upon arrival</span>
-                      )}
-                      {activeRide.status === 'driver_arrived' && (
-                        <span>Next step: Board passenger and begin trip</span>
-                      )}
-                      {activeRide.status === 'ride_started' && (
-                        <span>Next step: Drive to destination & complete trip</span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-2.5">
-                      {activeRide.status === 'accepted' && (
-                        <button
-                          onClick={() => handleUpdateRideStatus('driver_arriving')}
-                          disabled={isUpdatingStatus}
-                          className="rounded-lg bg-[#00C2FF] px-4 py-2 text-xs font-bold text-[#07111F] hover:bg-[#00C2FF]/90"
-                        >
-                          Mark Arriving at Pickup
-                        </button>
-                      )}
-
-                      {activeRide.status === 'driver_arriving' && (
-                        <button
-                          onClick={() => handleUpdateRideStatus('driver_arrived')}
-                          disabled={isUpdatingStatus}
-                          className="rounded-lg bg-[#00C2FF] px-4 py-2 text-xs font-bold text-[#07111F] hover:bg-[#00C2FF]/90"
-                        >
-                          Mark Arrived at Pickup
-                        </button>
-                      )}
-
-                      {activeRide.status === 'driver_arrived' && (
-                        <button
-                          onClick={() => handleUpdateRideStatus('ride_started')}
-                          disabled={isUpdatingStatus}
-                          className="rounded-lg bg-[#22C55E] px-4 py-2 text-xs font-bold text-[#07111F] hover:bg-[#22C55E]/90"
-                        >
-                          Start Trip
-                        </button>
-                      )}
-
-                      {activeRide.status === 'ride_started' && (
-                        <button
-                          onClick={() => handleUpdateRideStatus('ride_completed')}
-                          disabled={isUpdatingStatus}
-                          className="rounded-lg bg-[#22C55E] px-4 py-2 text-xs font-bold text-[#07111F] hover:bg-[#22C55E]/90 shadow-md shadow-[#22C55E]/20"
-                        >
-                          Complete Trip
-                        </button>
-                      )}
-
-                      <button
-                        onClick={() => handleUpdateRideStatus('cancelled')}
-                        disabled={isUpdatingStatus}
-                        className="rounded-lg border border-[#EF4444]/40 px-3 py-2 text-xs font-semibold text-[#EF4444] hover:bg-[#EF4444]/10"
-                      >
-                        Cancel Ride
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Map Route Viewer for Active Ride */}
-                <div className="rounded-xl border border-[#1E334D] overflow-hidden bg-[#07111F]">
-                  <div className="p-3 border-b border-[#1E334D] bg-[#0F1C2E] flex items-center justify-between text-xs">
-                    <span className="font-semibold text-[#E5F2FF]">Live Route Navigation</span>
-                    <span className="text-[#8FA6BF]">
-                      {activeRide.distance_km} km · {activeRide.estimated_duration_minutes} mins
-                    </span>
-                  </div>
-                  <div className="h-[380px] w-full">
-                    <GoogleMapWrapper
-                      pickup={{
-                        address: activeRide.pickup_address,
-                        latitude: activeRide.pickup_latitude,
-                        longitude: activeRide.pickup_longitude,
-                      }}
-                      destination={{
-                        address: activeRide.destination_address,
-                        latitude: activeRide.destination_latitude,
-                        longitude: activeRide.destination_longitude,
-                      }}
-                      stops={(activeRide.stops || []).map((s) => ({
-                        address: s.address,
-                        latitude: s.latitude,
-                        longitude: s.longitude,
-                        stopOrder: s.stop_order,
-                      }))}
-                      distanceKm={Number(activeRide.distance_km)}
-                      durationMinutes={Number(activeRide.estimated_duration_minutes)}
-                      isRealRoute={true}
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* TAB 4: VEHICLE FLEET MANAGEMENT */}
-        {activeTab === 'vehicle' && (
-          <div className="mt-6 space-y-6 max-w-2xl">
-            <div>
-              <h2 className="text-lg font-bold text-[#E5F2FF]">Fleet Vehicle Registration</h2>
-              <p className="text-xs text-[#8FA6BF]">
-                A verified vehicle is required to switch online and accept passenger bookings.
-              </p>
-            </div>
-
-            {vehicleMessage && (
-              <div
-                className={`p-3 rounded-lg text-xs border ${
-                  vehicleMessage.type === 'success'
-                    ? 'bg-[#22C55E]/10 border-[#22C55E]/30 text-[#22C55E]'
-                    : 'bg-[#EF4444]/10 border-[#EF4444]/30 text-[#EF4444]'
-                }`}
-              >
-                {vehicleMessage.text}
-              </div>
-            )}
-
-            <form onSubmit={handleSaveVehicle} className="space-y-4">
-              {/* Category Selection Cards */}
-              <div>
-                <label className="block text-xs font-medium text-[#8FA6BF] mb-2">
-                  Vehicle Category Tier
-                </label>
-                <div className="grid grid-cols-3 gap-3">
-                  {(['economy', 'comfort', 'premium'] as VehicleType[]).map((type) => (
-                    <button
-                      type="button"
-                      key={type}
-                      onClick={() => setVehicleForm((prev) => ({ ...prev, vehicleType: type }))}
-                      className={`p-3 rounded-lg border text-left transition-all ${
-                        vehicleForm.vehicleType === type
-                          ? 'border-[#00C2FF] bg-[#00C2FF]/10 text-[#E5F2FF]'
-                          : 'border-[#1E334D] bg-[#07111F] text-[#8FA6BF] hover:border-[#8FA6BF]/40'
-                      }`}
-                    >
-                      <span className="font-bold uppercase text-xs block text-[#00C2FF]">
-                        {type}
-                      </span>
-                      <span className="text-[10px] text-[#8FA6BF]">
-                        {type === 'economy' && 'Standard Hatchback / Compact'}
-                        {type === 'comfort' && 'Spacious Sedan / Compact SUV'}
-                        {type === 'premium' && 'Luxury Executive / Full SUV'}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-[#8FA6BF] mb-1">
-                    Vehicle Make
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Hyundai, Toyota"
-                    value={vehicleForm.make}
-                    onChange={(e) => setVehicleForm({ ...vehicleForm, make: e.target.value })}
-                    className="w-full rounded-lg border border-[#1E334D] bg-[#07111F] px-3.5 py-2.5 text-xs text-[#E5F2FF] focus:border-[#00C2FF] focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-[#8FA6BF] mb-1">
-                    Vehicle Model
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Creta, Innova, Dzire"
-                    value={vehicleForm.model}
-                    onChange={(e) => setVehicleForm({ ...vehicleForm, model: e.target.value })}
-                    className="w-full rounded-lg border border-[#1E334D] bg-[#07111F] px-3.5 py-2.5 text-xs text-[#E5F2FF] focus:border-[#00C2FF] focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-[#8FA6BF] mb-1">Color</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. White, Silver, Black"
-                    value={vehicleForm.color}
-                    onChange={(e) => setVehicleForm({ ...vehicleForm, color: e.target.value })}
-                    className="w-full rounded-lg border border-[#1E334D] bg-[#07111F] px-3.5 py-2.5 text-xs text-[#E5F2FF] focus:border-[#00C2FF] focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-[#8FA6BF] mb-1">
-                    Registration Number
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="GJ-01-AB-1234"
-                    value={vehicleForm.registrationNumber}
-                    onChange={(e) =>
-                      setVehicleForm({ ...vehicleForm, registrationNumber: e.target.value })
-                    }
-                    className="w-full rounded-lg border border-[#1E334D] bg-[#07111F] px-3.5 py-2.5 text-xs text-[#E5F2FF] uppercase font-mono focus:border-[#00C2FF] focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-[#8FA6BF] mb-1">
-                    Year (1990 - 2050)
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min={1990}
-                    max={2050}
-                    value={vehicleForm.year}
-                    onChange={(e) =>
-                      setVehicleForm({ ...vehicleForm, year: Number(e.target.value) })
-                    }
-                    className="w-full rounded-lg border border-[#1E334D] bg-[#07111F] px-3.5 py-2.5 text-xs text-[#E5F2FF] focus:border-[#00C2FF] focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-[#1E334D] flex justify-end">
-                <button
-                  type="submit"
-                  disabled={isSavingVehicle}
-                  className="rounded-lg bg-[#00C2FF] px-5 py-2.5 text-xs font-bold text-[#07111F] hover:bg-[#00C2FF]/90 transition-all disabled:opacity-50"
-                >
-                  {isSavingVehicle ? 'Saving Vehicle...' : 'Save Fleet Vehicle'}
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
-
-        {/* TAB 5: RIDE HISTORY */}
-        {activeTab === 'history' && (
-          <div className="mt-6 space-y-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-[#E5F2FF]">Completed Trips History</h2>
-                <p className="text-xs text-[#8FA6BF]">
-                  All completed and processed trips linked to your driver partner account.
-                </p>
-              </div>
-              <button
-                onClick={loadHistory}
-                disabled={isLoadingHistory}
-                className="flex items-center gap-1.5 rounded-lg border border-[#1E334D] bg-[#07111F] px-3 py-1.5 text-xs text-[#8FA6BF] hover:text-[#E5F2FF]"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${isLoadingHistory ? 'animate-spin' : ''}`} />
+                <RefreshCw className="h-3 w-3" />
                 <span>Refresh</span>
               </button>
             </div>
 
-            {historyRides.length === 0 ? (
-              <div className="text-center py-16 border border-dashed border-[#1E334D] rounded-xl bg-[#07111F]/50">
-                <History className="mx-auto h-8 w-8 text-[#8FA6BF] mb-3" />
-                <h3 className="text-base font-bold text-[#E5F2FF]">No Rides Completed Yet</h3>
-                <p className="mt-1 text-xs text-[#8FA6BF] max-w-sm mx-auto">
-                  When you accept and finish rides, your trip earnings and historical records will be listed here.
+            {requests.length === 0 ? (
+              <div className="py-10 text-center">
+                <Car className="mx-auto h-8 w-8 text-[#737373] mb-2 opacity-50" />
+                <p className="text-xs font-semibold text-[#171717]">No open ride requests right now</p>
+                <p className="text-[11px] text-[#737373] mt-1 max-w-sm mx-auto">
+                  {profile?.isOnline
+                    ? 'Stay online. As soon as a rider books a trip in your vehicle tier, it will pop up here instantly.'
+                    : 'Turn your status ONLINE above to begin receiving passenger requests in real-time.'}
                 </p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {historyRides.map((ride) => (
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                {requests.slice(0, 4).map((req) => (
                   <div
-                    key={ride.id}
-                    className="rounded-xl border border-[#1E334D] bg-[#07111F] p-4 text-xs"
+                    key={req.id}
+                    className="rounded-lg border border-[#E5E5E5] p-3.5 hover:border-[#E21D2B] transition-all bg-[#FFFFFF]"
                   >
-                    <div className="flex items-center justify-between pb-2 border-b border-[#1E334D]">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold text-[#00C2FF]">
-                          {ride.reference_id || ride.id.slice(0, 8)}
-                        </span>
-                        <span className="text-[#8FA6BF]">·</span>
-                        <span
-                          className={`uppercase font-bold text-[10px] px-2 py-0.5 rounded ${
-                            ride.status === 'ride_completed'
-                              ? 'bg-[#22C55E]/15 text-[#22C55E]'
-                              : 'bg-[#EF4444]/15 text-[#EF4444]'
-                          }`}
-                        >
-                          {ride.status.replace(/_/g, ' ')}
-                        </span>
-                      </div>
-                      <span className="font-bold text-[#22C55E]">₹{ride.estimated_fare}</span>
+                    <div className="flex items-center justify-between pb-2 border-b border-[#E5E5E5]">
+                      <span className="text-[10px] font-mono font-bold text-[#E21D2B]">
+                        {req.referenceId || req.id.slice(0, 8)}
+                      </span>
+                      <span className="text-xs font-extrabold text-[#15803D]">
+                        ₹{req.estimatedDriverEarnings || (req.estimatedFare * 0.85).toFixed(0)} payout
+                      </span>
                     </div>
 
-                    <div className="mt-2 space-y-1">
-                      <p className="text-[#E5F2FF]">
-                        <strong>From:</strong> {ride.pickup_address}
-                      </p>
-                      <p className="text-[#E5F2FF]">
-                        <strong>To:</strong> {ride.destination_address}
-                      </p>
-                      <p className="text-[#8FA6BF] text-[11px]">
-                        Distance: {ride.distance_km} km · Duration: {ride.estimated_duration_minutes} mins
-                      </p>
+                    <div className="mt-2 space-y-1 text-xs">
+                      <div className="flex items-start gap-1.5">
+                        <span className="h-1.5 w-1.5 rounded-full bg-[#15803D] mt-1.5 shrink-0" />
+                        <span className="truncate text-[#171717]">{req.pickupAddress}</span>
+                      </div>
+                      <div className="flex items-start gap-1.5">
+                        <span className="h-1.5 w-1.5 rounded-full bg-[#E21D2B] mt-1.5 shrink-0" />
+                        <span className="truncate text-[#171717]">{req.destinationAddress}</span>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 pt-2 border-t border-[#E5E5E5] flex items-center justify-between">
+                      <span className="text-[10px] text-[#737373]">
+                        {req.distanceKm} km · {req.rideType.toUpperCase()}
+                      </span>
+                      <button
+                        onClick={() => handleAcceptRide(req.id)}
+                        disabled={actionLoading}
+                        className="px-3 py-1 rounded bg-[#E21D2B] hover:bg-[#BE1622] text-white font-bold text-xs transition-colors flex items-center gap-1 shadow-sm"
+                      >
+                        <Check className="h-3 w-3" />
+                        <span>Accept Ride</span>
+                      </button>
                     </div>
                   </div>
                 ))}
               </div>
             )}
           </div>
-        )}
+        </div>
+      )}
 
-        {/* TAB 6: DRIVER PROFILE */}
-        {activeTab === 'profile' && (
-          <div className="mt-6 space-y-6 max-w-2xl">
+      {/* TAB 2: RIDE REQUESTS */}
+      {activeTab === 'requests' && (
+        <div className="mt-6 space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-[#E5E5E5]">
             <div>
-              <h2 className="text-lg font-bold text-[#E5F2FF]">Driver Partner Profile</h2>
-              <p className="text-xs text-[#8FA6BF]">
-                Manage contact info and driver license verification records.
+              <h2 className="text-base font-bold text-[#171717]">Available Passenger Requests</h2>
+              <p className="text-xs text-[#737373]">Live pool of unassigned rides waiting for driver pickup.</p>
+            </div>
+            <button
+              onClick={loadRequests}
+              className="px-3 py-1.5 rounded-lg border border-[#E5E5E5] text-xs font-semibold text-[#171717] hover:border-[#E21D2B] transition-colors flex items-center gap-1.5"
+            >
+              <RefreshCw className="h-3.5 w-3.5 text-[#E21D2B]" />
+              <span>Refresh Pool</span>
+            </button>
+          </div>
+
+          {requests.length === 0 ? (
+            <div className="py-16 text-center border border-dashed border-[#E5E5E5] rounded-xl bg-[#FAFAFA]">
+              <Car className="mx-auto h-10 w-10 text-[#737373] mb-2 opacity-40" />
+              <h3 className="text-sm font-bold text-[#171717]">No open requests found</h3>
+              <p className="mt-1 text-xs text-[#737373] max-w-sm mx-auto">
+                All requests in your area have been assigned or passengers are currently planning routes. Keep this screen open; new trips will appear automatically.
               </p>
             </div>
-
-            <form onSubmit={handleSaveDriverProfile} className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-[#8FA6BF] mb-1">Full Name</label>
-                <input
-                  type="text"
-                  disabled
-                  value={user?.name || ''}
-                  className="w-full rounded-lg border border-[#1E334D] bg-[#07111F]/50 px-3.5 py-2.5 text-xs text-[#8FA6BF] cursor-not-allowed"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-[#8FA6BF] mb-1">
-                  Email (Clerk Auth Verified)
-                </label>
-                <input
-                  type="email"
-                  disabled
-                  value={user?.email || ''}
-                  className="w-full rounded-lg border border-[#1E334D] bg-[#07111F]/50 px-3.5 py-2.5 text-xs text-[#8FA6BF] cursor-not-allowed font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-[#8FA6BF] mb-1">
-                  Contact Phone Number
-                </label>
-                <input
-                  type="tel"
-                  placeholder="+91 98765 43210"
-                  value={driverPhoneForm}
-                  onChange={(e) => setDriverPhoneForm(e.target.value)}
-                  className="w-full rounded-lg border border-[#1E334D] bg-[#07111F] px-3.5 py-2.5 text-xs text-[#E5F2FF] focus:border-[#00C2FF] focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-[#8FA6BF] mb-1">
-                  Driving License Number
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="GJ-06-2022-987654"
-                  value={driverLicenseForm}
-                  onChange={(e) => setDriverLicenseForm(e.target.value)}
-                  className="w-full rounded-lg border border-[#1E334D] bg-[#07111F] px-3.5 py-2.5 text-xs text-[#E5F2FF] uppercase font-mono focus:border-[#00C2FF] focus:outline-none"
-                />
-              </div>
-
-              <div className="pt-4 border-t border-[#1E334D] flex justify-end">
-                <button
-                  type="submit"
-                  disabled={isSavingDriverProfile}
-                  className="rounded-lg bg-[#00C2FF] px-5 py-2.5 text-xs font-bold text-[#07111F] hover:bg-[#00C2FF]/90 transition-all disabled:opacity-50"
+          ) : (
+            <div className="space-y-3">
+              {requests.map((req) => (
+                <div
+                  key={req.id}
+                  className="rounded-xl border border-[#E5E5E5] bg-[#FFFFFF] p-5 shadow-sm hover:border-[#E21D2B] transition-all flex flex-col md:flex-row md:items-center justify-between gap-4"
                 >
-                  {isSavingDriverProfile ? 'Updating Profile...' : 'Save Profile Changes'}
+                  <div className="space-y-2 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs font-black text-[#E21D2B]">
+                        {req.referenceId || req.id}
+                      </span>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-[#E21D2B]/10 text-[#E21D2B]">
+                        {req.rideType}
+                      </span>
+                      <span className="text-[10px] text-[#737373]">
+                        Requested {new Date(req.requestedAt).toLocaleTimeString()}
+                      </span>
+                    </div>
+
+                    <div className="space-y-1 text-xs">
+                      <div className="flex items-start gap-2">
+                        <span className="h-2 w-2 rounded-full bg-[#15803D] mt-1 shrink-0" />
+                        <div>
+                          <span className="text-[10px] text-[#737373] block">Pickup Location</span>
+                          <span className="font-medium text-[#171717]">{req.pickupAddress}</span>
+                        </div>
+                      </div>
+
+                      {req.stops?.map((s) => (
+                        <div key={s.stopOrder} className="flex items-start gap-2 pl-2">
+                          <span className="h-1.5 w-1.5 rounded-full bg-[#B45309] mt-1 shrink-0" />
+                          <div>
+                            <span className="text-[10px] text-[#737373] block">Stop #{s.stopOrder}</span>
+                            <span className="text-[#171717]">{s.address}</span>
+                          </div>
+                        </div>
+                      ))}
+
+                      <div className="flex items-start gap-2">
+                        <span className="h-2 w-2 rounded-full bg-[#E21D2B] mt-1 shrink-0" />
+                        <div>
+                          <span className="text-[10px] text-[#737373] block">Destination</span>
+                          <span className="font-medium text-[#171717]">{req.destinationAddress}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="shrink-0 flex flex-row md:flex-col items-center md:items-end justify-between gap-3 pt-3 md:pt-0 border-t md:border-t-0 border-[#E5E5E5]">
+                    <div className="text-left md:text-right">
+                      <span className="text-[11px] text-[#737373] block">Your Net Earnings (85%)</span>
+                      <span className="text-xl font-black text-[#15803D]">
+                        ₹{req.estimatedDriverEarnings || (req.estimatedFare * 0.85).toFixed(0)}
+                      </span>
+                      <span className="text-[10px] text-[#737373] block">Total fare: ₹{req.estimatedFare}</span>
+                    </div>
+
+                    <button
+                      onClick={() => handleAcceptRide(req.id)}
+                      disabled={actionLoading}
+                      className="px-5 py-2.5 rounded-lg bg-[#E21D2B] hover:bg-[#BE1622] text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5"
+                    >
+                      <Check className="h-4 w-4" />
+                      <span>Accept Ride</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 3: ACTIVE RIDE LIFECYCLE CONSOLE */}
+      {activeTab === 'active' && (
+        <div className="mt-6 space-y-6">
+          {!activeRide ? (
+            <div className="py-16 text-center border border-dashed border-[#E5E5E5] rounded-xl bg-[#FAFAFA]">
+              <Car className="mx-auto h-12 w-12 text-[#737373] mb-3 opacity-30" />
+              <h3 className="text-base font-bold text-[#171717]">No Active Ride In Progress</h3>
+              <p className="mt-1 text-xs text-[#737373] max-w-sm mx-auto">
+                You are currently free. Go to the "Ride Requests" tab to accept an incoming passenger trip.
+              </p>
+              <button
+                onClick={() => setActiveTab('requests')}
+                className="mt-4 px-4 py-2 rounded-lg bg-[#E21D2B] text-white text-xs font-bold hover:bg-[#BE1622] transition-colors"
+              >
+                Browse Ride Requests ({requests.length})
+              </button>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-[#E5E5E5] bg-[#FFFFFF] p-6 shadow-md space-y-6">
+              {/* Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-[#E5E5E5] gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-full bg-[#15803D] animate-ping" />
+                    <span className="text-xs font-black uppercase text-[#E21D2B]">ACTIVE RIDE DISPATCH</span>
+                    <span className="font-mono text-xs font-bold text-[#171717]">
+                      {activeRide.reference_id || activeRide.id}
+                    </span>
+                  </div>
+                  <h2 className="mt-1 text-xl font-black text-[#171717]">
+                    Current Status:{' '}
+                    <span className="text-[#E21D2B] uppercase">
+                      {activeRide.status.replace('_', ' ')}
+                    </span>
+                  </h2>
+                </div>
+
+                <div className="text-left sm:text-right">
+                  <span className="text-[11px] text-[#737373] block">Trip Fare</span>
+                  <span className="text-2xl font-black text-[#15803D]">₹{activeRide.estimated_fare}</span>
+                </div>
+              </div>
+
+              {/* Lifecycle Progress Bar */}
+              <div className="grid grid-cols-4 gap-2 text-center text-xs">
+                <div
+                  className={`p-2.5 rounded-lg border font-bold ${
+                    ['accepted', 'driver_arriving', 'driver_arrived', 'ride_started', 'ride_completed'].includes(
+                      activeRide.status
+                    )
+                      ? 'border-[#15803D] bg-[#15803D]/10 text-[#15803D]'
+                      : 'border-[#E5E5E5] text-[#737373]'
+                  }`}
+                >
+                  1. Accepted
+                </div>
+                <div
+                  className={`p-2.5 rounded-lg border font-bold ${
+                    ['driver_arriving', 'driver_arrived', 'ride_started', 'ride_completed'].includes(activeRide.status)
+                      ? 'border-[#15803D] bg-[#15803D]/10 text-[#15803D]'
+                      : 'border-[#E5E5E5] text-[#737373]'
+                  }`}
+                >
+                  2. Arriving
+                </div>
+                <div
+                  className={`p-2.5 rounded-lg border font-bold ${
+                    ['driver_arrived', 'ride_started', 'ride_completed'].includes(activeRide.status)
+                      ? 'border-[#15803D] bg-[#15803D]/10 text-[#15803D]'
+                      : 'border-[#E5E5E5] text-[#737373]'
+                  }`}
+                >
+                  3. At Pickup
+                </div>
+                <div
+                  className={`p-2.5 rounded-lg border font-bold ${
+                    ['ride_started', 'ride_completed'].includes(activeRide.status)
+                      ? 'border-[#15803D] bg-[#15803D]/10 text-[#15803D]'
+                      : 'border-[#E5E5E5] text-[#737373]'
+                  }`}
+                >
+                  4. On Route
+                </div>
+              </div>
+
+              {/* Waypoints & Routing details */}
+              <div className="rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] p-4 space-y-3 text-xs">
+                <div className="flex items-start gap-2.5">
+                  <span className="h-3 w-3 rounded-full bg-[#15803D] mt-0.5 shrink-0" />
+                  <div>
+                    <span className="text-[10px] text-[#737373] uppercase font-bold block">Pickup Address</span>
+                    <span className="font-semibold text-[#171717] text-sm">{activeRide.pickup_address}</span>
+                  </div>
+                </div>
+
+                {activeRide.stops?.map((stop) => (
+                  <div key={stop.id} className="flex items-start gap-2.5 pl-3 border-l-2 border-[#B45309]">
+                    <span className="h-2.5 w-2.5 rounded-full bg-[#B45309] mt-0.5 shrink-0" />
+                    <div>
+                      <span className="text-[10px] text-[#737373] uppercase font-bold block">
+                        Stop #{stop.stop_order}
+                      </span>
+                      <span className="font-medium text-[#171717]">{stop.address}</span>
+                    </div>
+                  </div>
+                ))}
+
+                <div className="flex items-start gap-2.5">
+                  <span className="h-3 w-3 rounded-full bg-[#E21D2B] mt-0.5 shrink-0" />
+                  <div>
+                    <span className="text-[10px] text-[#737373] uppercase font-bold block">Destination Address</span>
+                    <span className="font-semibold text-[#171717] text-sm">{activeRide.destination_address}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Driver Action Lifecycle Buttons */}
+              <div className="pt-4 border-t border-[#E5E5E5] flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  {activeRide.status === 'accepted' && (
+                    <button
+                      onClick={() => handleUpdateRideStatus('driver_arriving')}
+                      disabled={actionLoading}
+                      className="px-5 py-2.5 rounded-lg bg-[#E21D2B] hover:bg-[#BE1622] text-white font-bold text-xs shadow-md transition-all flex items-center gap-2"
+                    >
+                      <Navigation className="h-4 w-4" />
+                      <span>Start Driving to Pickup</span>
+                    </button>
+                  )}
+
+                  {activeRide.status === 'driver_arriving' && (
+                    <button
+                      onClick={() => handleUpdateRideStatus('driver_arrived')}
+                      disabled={actionLoading}
+                      className="px-5 py-2.5 rounded-lg bg-[#B45309] hover:bg-[#B45309]/90 text-white font-bold text-xs shadow-md transition-all flex items-center gap-2"
+                    >
+                      <MapPin className="h-4 w-4" />
+                      <span>I Have Arrived at Pickup</span>
+                    </button>
+                  )}
+
+                  {activeRide.status === 'driver_arrived' && (
+                    <button
+                      onClick={() => handleUpdateRideStatus('ride_started')}
+                      disabled={actionLoading}
+                      className="px-5 py-2.5 rounded-lg bg-[#15803D] hover:bg-[#15803D]/90 text-white font-bold text-xs shadow-md transition-all flex items-center gap-2"
+                    >
+                      <Car className="h-4 w-4" />
+                      <span>Passenger Boarded · Start Trip</span>
+                    </button>
+                  )}
+
+                  {activeRide.status === 'ride_started' && (
+                    <button
+                      onClick={() => handleUpdateRideStatus('ride_completed')}
+                      disabled={actionLoading}
+                      className="px-6 py-2.5 rounded-lg bg-[#15803D] hover:bg-[#15803D]/90 text-white font-bold text-xs shadow-md transition-all flex items-center gap-2"
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                      <span>Destination Reached · Complete Ride</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Cancel Ride with reason */}
+                <button
+                  onClick={() => {
+                    const reason = window.prompt('Please provide a cancellation reason:') || 'Driver operational conflict';
+                    handleUpdateRideStatus('cancelled', reason);
+                  }}
+                  disabled={actionLoading}
+                  className="px-3.5 py-2 rounded-lg border border-[#B91C1C]/40 text-[#B91C1C] hover:bg-[#B91C1C]/10 text-xs font-semibold transition-colors"
+                >
+                  Cancel Ride
                 </button>
               </div>
-            </form>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 4: RIDE HISTORY & EARNINGS */}
+      {activeTab === 'history' && (
+        <div className="mt-6 space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-[#E5E5E5]">
+            <div>
+              <h2 className="text-base font-bold text-[#171717]">Trip & Payout History</h2>
+              <p className="text-xs text-[#737373]">Records of completed and handled customer rides.</p>
+            </div>
+            <div className="text-right">
+              <span className="text-xs text-[#737373]">Total Earned: </span>
+              <strong className="text-sm font-black text-[#15803D]">₹{totalEarnings.toFixed(2)}</strong>
+            </div>
           </div>
-        )}
-      </main>
-    </div>
+
+          {history.length === 0 ? (
+            <div className="py-12 text-center text-xs text-[#737373]">No past trips found.</div>
+          ) : (
+            <div className="space-y-3">
+              {history.map((ride) => (
+                <div key={ride.id} className="rounded-xl border border-[#E5E5E5] bg-[#FFFFFF] p-4 text-xs space-y-2">
+                  <div className="flex items-center justify-between pb-2 border-b border-[#E5E5E5]">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-bold text-[#E21D2B]">{ride.reference_id || ride.id.slice(0, 8)}</span>
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold ${
+                          ride.status === 'ride_completed'
+                            ? 'bg-[#15803D]/10 text-[#15803D]'
+                            : 'bg-[#737373]/10 text-[#737373]'
+                        }`}
+                      >
+                        {ride.status.replace('_', ' ')}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-sm font-bold text-[#15803D]">
+                        +₹{((ride.final_fare ? Number(ride.final_fare) : Number(ride.estimated_fare)) * 0.85).toFixed(2)}
+                      </span>
+                      <span className="text-[10px] text-[#737373] block">
+                        Gross ₹{ride.final_fare || ride.estimated_fare}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <p className="truncate text-[#171717]">
+                      <strong>Pickup:</strong> {ride.pickup_address}
+                    </p>
+                    <p className="truncate text-[#171717]">
+                      <strong>Destination:</strong> {ride.destination_address}
+                    </p>
+                  </div>
+
+                  <div className="pt-2 border-t border-[#E5E5E5] flex items-center justify-between text-[11px] text-[#737373]">
+                    <span>Category: {ride.ride_type.toUpperCase()}</span>
+                    <span>Distance: {ride.distance_km} km</span>
+                    <span>{new Date(ride.created_at).toLocaleString()}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 5: VEHICLE FLEET */}
+      {activeTab === 'vehicle' && (
+        <div className="mt-6 max-w-2xl space-y-6">
+          <div className="pb-3 border-b border-[#E5E5E5]">
+            <h2 className="text-base font-bold text-[#171717]">Assigned Fleet Vehicle</h2>
+            <p className="text-xs text-[#737373]">
+              Update the car you are using for RideNova trips. This details is shown to riders when they book.
+            </p>
+          </div>
+
+          <form onSubmit={handleSaveVehicle} className="space-y-4 bg-[#FFFFFF] rounded-xl border border-[#E5E5E5] p-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-semibold text-[#171717] block mb-1">Vehicle Category</label>
+                <select
+                  value={vehicleForm.vehicleType}
+                  onChange={(e) => setVehicleForm({ ...vehicleForm, vehicleType: e.target.value as VehicleType })}
+                  className="w-full rounded-lg border border-[#E5E5E5] px-3 py-2 text-xs text-[#171717] focus:border-[#E21D2B] focus:outline-none"
+                >
+                  <option value="economy">Economy (Hatchback / Compact)</option>
+                  <option value="comfort">Comfort (Sedan / Premium Hatch)</option>
+                  <option value="premium">Premium (Luxury Sedan / SUV)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-[#171717] block mb-1">Registration / Number Plate</label>
+                <input
+                  type="text"
+                  value={vehicleForm.registrationNumber}
+                  onChange={(e) => setVehicleForm({ ...vehicleForm, registrationNumber: e.target.value })}
+                  placeholder="e.g. DL-01-RN-2026"
+                  required
+                  className="w-full rounded-lg border border-[#E5E5E5] px-3 py-2 text-xs text-[#171717] focus:border-[#E21D2B] focus:outline-none uppercase font-mono font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-[#171717] block mb-1">Make / Brand</label>
+                <input
+                  type="text"
+                  value={vehicleForm.make}
+                  onChange={(e) => setVehicleForm({ ...vehicleForm, make: e.target.value })}
+                  placeholder="e.g. Toyota"
+                  required
+                  className="w-full rounded-lg border border-[#E5E5E5] px-3 py-2 text-xs text-[#171717] focus:border-[#E21D2B] focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-[#171717] block mb-1">Model Name</label>
+                <input
+                  type="text"
+                  value={vehicleForm.model}
+                  onChange={(e) => setVehicleForm({ ...vehicleForm, model: e.target.value })}
+                  placeholder="e.g. Camry Hybrid"
+                  required
+                  className="w-full rounded-lg border border-[#E5E5E5] px-3 py-2 text-xs text-[#171717] focus:border-[#E21D2B] focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-[#171717] block mb-1">Exterior Color</label>
+                <input
+                  type="text"
+                  value={vehicleForm.color}
+                  onChange={(e) => setVehicleForm({ ...vehicleForm, color: e.target.value })}
+                  placeholder="e.g. Pearl White"
+                  required
+                  className="w-full rounded-lg border border-[#E5E5E5] px-3 py-2 text-xs text-[#171717] focus:border-[#E21D2B] focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-[#171717] block mb-1">Manufacturing Year</label>
+                <input
+                  type="number"
+                  min="2010"
+                  max="2026"
+                  value={vehicleForm.year}
+                  onChange={(e) => setVehicleForm({ ...vehicleForm, year: parseInt(e.target.value, 10) || 2024 })}
+                  required
+                  className="w-full rounded-lg border border-[#E5E5E5] px-3 py-2 text-xs text-[#171717] focus:border-[#E21D2B] focus:outline-none font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-[#E5E5E5] flex justify-end">
+              <button
+                type="submit"
+                disabled={actionLoading}
+                className="px-5 py-2.5 rounded-lg bg-[#E21D2B] hover:bg-[#BE1622] text-white font-bold text-xs shadow-md transition-all"
+              >
+                Save Vehicle Details
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* TAB 6: DRIVER PROFILE */}
+      {activeTab === 'profile' && (
+        <div className="mt-6 max-w-2xl space-y-6">
+          <div className="pb-3 border-b border-[#E5E5E5]">
+            <h2 className="text-base font-bold text-[#171717]">Driver Verification Profile</h2>
+            <p className="text-xs text-[#737373]">
+              Your official credentials on the RideNova network.
+            </p>
+          </div>
+
+          <form onSubmit={handleSaveProfile} className="space-y-4 bg-[#FFFFFF] rounded-xl border border-[#E5E5E5] p-5">
+            <div>
+              <label className="text-xs font-semibold text-[#171717] block mb-1">Full Name</label>
+              <input
+                type="text"
+                value={profileForm.name}
+                onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
+                required
+                className="w-full rounded-lg border border-[#E5E5E5] px-3 py-2 text-xs text-[#171717] focus:border-[#E21D2B] focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-[#171717] block mb-1">Phone Number</label>
+              <input
+                type="tel"
+                value={profileForm.phone}
+                onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
+                placeholder="+91 98765 43210"
+                className="w-full rounded-lg border border-[#E5E5E5] px-3 py-2 text-xs text-[#171717] focus:border-[#E21D2B] focus:outline-none font-mono"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-[#171717] block mb-1">Driver License Number</label>
+              <input
+                type="text"
+                value={profileForm.licenseNumber}
+                onChange={(e) => setProfileForm({ ...profileForm, licenseNumber: e.target.value })}
+                required
+                className="w-full rounded-lg border border-[#E5E5E5] px-3 py-2 text-xs text-[#171717] focus:border-[#E21D2B] focus:outline-none font-mono uppercase"
+              />
+            </div>
+
+            <div className="pt-3 border-t border-[#E5E5E5] flex justify-end">
+              <button
+                type="submit"
+                disabled={actionLoading}
+                className="px-5 py-2.5 rounded-lg bg-[#E21D2B] hover:bg-[#BE1622] text-white font-bold text-xs shadow-md transition-all"
+              >
+                Update Profile
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+    </DashboardLayout>
   );
 };

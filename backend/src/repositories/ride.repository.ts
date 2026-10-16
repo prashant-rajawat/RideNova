@@ -29,9 +29,82 @@ export interface CreateStopDbInput {
   longitude: number;
 }
 
+export interface DriverDisplayInfo {
+  id: string;
+  name: string;
+  phone: string | null;
+  rating: number;
+  total_rides: number;
+  profile_image_url?: string | null;
+  current_latitude?: number | null;
+  current_longitude?: number | null;
+  vehicle: {
+    make: string;
+    model: string;
+    color: string;
+    registration_number: string;
+    year: number;
+    vehicle_type: VehicleType;
+  } | null;
+}
+
 export interface RideWithStops extends Ride {
   stops: RideStop[];
   reference_id?: string;
+  driver?: DriverDisplayInfo | null;
+  scheduled_at?: string | null;
+}
+
+async function enrichRideWithDriver(ride: Ride, stops: RideStop[]): Promise<RideWithStops> {
+  const shortRef = `RN-${new Date(ride.created_at).toISOString().slice(0, 10).replace(/-/g, '')}-${ride.id.slice(0, 6).toUpperCase()}`;
+  let driverInfo: DriverDisplayInfo | null = null;
+
+  if (ride.driver_id && isDatabaseConfigured()) {
+    try {
+      const res = await query<any>(
+        `SELECT d.id, u.name, u.phone, u.profile_image_url, d.rating, d.total_rides,
+                d.current_latitude, d.current_longitude,
+                v.make, v.model, v.color, v.registration_number, v.year, v.vehicle_type
+         FROM drivers d
+         JOIN users u ON u.id = d.user_id
+         LEFT JOIN vehicles v ON v.driver_id = d.id
+         WHERE d.id = $1 LIMIT 1`,
+        [ride.driver_id]
+      );
+      if (res.rows.length > 0) {
+        const row = res.rows[0];
+        driverInfo = {
+          id: row.id,
+          name: row.name,
+          phone: row.phone,
+          rating: parseFloat(row.rating || '5.0'),
+          total_rides: parseInt(row.total_rides || '0', 10),
+          profile_image_url: row.profile_image_url,
+          current_latitude: row.current_latitude,
+          current_longitude: row.current_longitude,
+          vehicle: row.make
+            ? {
+                make: row.make,
+                model: row.model,
+                color: row.color,
+                registration_number: row.registration_number,
+                year: row.year,
+                vehicle_type: row.vehicle_type,
+              }
+            : null,
+        };
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return {
+    ...ride,
+    stops,
+    reference_id: shortRef,
+    driver: driverInfo,
+  };
 }
 
 export const rideRepository = {
@@ -185,13 +258,7 @@ export const rideRepository = {
           [rideId]
         );
 
-        const shortRef = `RN-${new Date(ride.created_at).toISOString().slice(0, 10).replace(/-/g, '')}-${ride.id.slice(0, 6).toUpperCase()}`;
-
-        return {
-          ...ride,
-          stops: stopsRes.rows,
-          reference_id: shortRef,
-        };
+        return enrichRideWithDriver(ride, stopsRes.rows);
       } catch (error) {
         logger.error('Error finding ride by ID', { error: (error as Error).message, rideId });
         throw error;
@@ -202,13 +269,7 @@ export const rideRepository = {
     if (!ride) return null;
 
     const stops = memoryRideStops.get(rideId) || [];
-    const shortRef = `RN-${new Date(ride.created_at).toISOString().slice(0, 10).replace(/-/g, '')}-${ride.id.slice(-6).toUpperCase()}`;
-
-    return {
-      ...ride,
-      stops,
-      reference_id: shortRef,
-    };
+    return enrichRideWithDriver(ride, stops);
   },
 
   /**
@@ -228,12 +289,7 @@ export const rideRepository = {
             `SELECT * FROM ride_stops WHERE ride_id = $1 ORDER BY stop_order ASC`,
             [ride.id]
           );
-          const shortRef = `RN-${new Date(ride.created_at).toISOString().slice(0, 10).replace(/-/g, '')}-${ride.id.slice(0, 6).toUpperCase()}`;
-          results.push({
-            ...ride,
-            stops: stopsRes.rows,
-            reference_id: shortRef,
-          });
+          results.push(await enrichRideWithDriver(ride, stopsRes.rows));
         }
         return results;
       } catch (error) {
@@ -246,12 +302,7 @@ export const rideRepository = {
     for (const ride of memoryRides.values()) {
       if (ride.rider_id === riderId) {
         const stops = memoryRideStops.get(ride.id) || [];
-        const shortRef = `RN-${new Date(ride.created_at).toISOString().slice(0, 10).replace(/-/g, '')}-${ride.id.slice(-6).toUpperCase()}`;
-        results.push({
-          ...ride,
-          stops,
-          reference_id: shortRef,
-        });
+        results.push(await enrichRideWithDriver(ride, stops));
       }
     }
 
@@ -351,12 +402,7 @@ export const rideRepository = {
           [acceptedRide.id]
         );
 
-        const shortRef = `RN-${new Date(acceptedRide.created_at).toISOString().slice(0, 10).replace(/-/g, '')}-${acceptedRide.id.slice(0, 6).toUpperCase()}`;
-        return {
-          ...acceptedRide,
-          stops: stopsRes.rows,
-          reference_id: shortRef,
-        };
+        return enrichRideWithDriver(acceptedRide, stopsRes.rows);
       } catch (error) {
         logger.error('Error during atomic ride assignment in PostgreSQL', {
           error: (error as Error).message,
@@ -381,13 +427,7 @@ export const rideRepository = {
     memoryRides.set(rideId, ride);
 
     const stops = memoryRideStops.get(rideId) || [];
-    const shortRef = `RN-${new Date(ride.created_at).toISOString().slice(0, 10).replace(/-/g, '')}-${ride.id.slice(-6).toUpperCase()}`;
-
-    return {
-      ...ride,
-      stops,
-      reference_id: shortRef,
-    };
+    return enrichRideWithDriver(ride, stops);
   },
 
   /**
@@ -482,11 +522,7 @@ export const rideRepository = {
         );
 
         const shortRef = `RN-${new Date(ride.created_at).toISOString().slice(0, 10).replace(/-/g, '')}-${ride.id.slice(0, 6).toUpperCase()}`;
-        return {
-          ...ride,
-          stops: stopsRes.rows,
-          reference_id: shortRef,
-        };
+        return enrichRideWithDriver(ride, stopsRes.rows);
       } catch (error) {
         logger.error('Error updating ride status in PostgreSQL', {
           error: (error as Error).message,
@@ -512,13 +548,7 @@ export const rideRepository = {
     memoryRides.set(rideId, ride);
 
     const stops = memoryRideStops.get(rideId) || [];
-    const shortRef = `RN-${new Date(ride.created_at).toISOString().slice(0, 10).replace(/-/g, '')}-${ride.id.slice(-6).toUpperCase()}`;
-
-    return {
-      ...ride,
-      stops,
-      reference_id: shortRef,
-    };
+    return enrichRideWithDriver(ride, stops);
   },
 
   /**
@@ -568,6 +598,94 @@ export const rideRepository = {
       }
     }
 
+    return results.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  },
+
+  /**
+   * Cancel ride by rider or driver
+   */
+  async cancelRide(rideId: string, _cancelledByUserId: string, reason?: string): Promise<RideWithStops | null> {
+    const cancellationReason = reason || 'Ride cancelled by user';
+
+    if (isDatabaseConfigured()) {
+      try {
+        const res = await query<Ride>(
+          `UPDATE rides 
+           SET status = 'cancelled', cancelled_at = NOW(), cancellation_reason = $1, updated_at = NOW()
+           WHERE id = $2 AND status IN ('requested', 'accepted', 'driver_arriving')
+           RETURNING *`,
+          [cancellationReason, rideId]
+        );
+
+        if (res.rows.length === 0) return null;
+
+        const ride = res.rows[0];
+        const stopsRes = await query<RideStop>(
+          `SELECT * FROM ride_stops WHERE ride_id = $1 ORDER BY stop_order ASC`,
+          [ride.id]
+        );
+        return enrichRideWithDriver(ride, stopsRes.rows);
+      } catch (error) {
+        logger.error('Error cancelling ride in database', {
+          error: (error as Error).message,
+          rideId,
+        });
+        throw error;
+      }
+    }
+
+    const ride = memoryRides.get(rideId);
+    if (!ride || !['requested', 'accepted', 'driver_arriving'].includes(ride.status)) return null;
+
+    ride.status = 'cancelled';
+    ride.cancelled_at = new Date().toISOString();
+    ride.cancellation_reason = cancellationReason;
+    ride.updated_at = new Date().toISOString();
+    memoryRides.set(rideId, ride);
+
+    const stops = memoryRideStops.get(rideId) || [];
+    return enrichRideWithDriver(ride, stops);
+  },
+
+  /**
+   * Retrieve all rides for Admin console
+   */
+  async getAllRides(status?: string): Promise<RideWithStops[]> {
+    if (isDatabaseConfigured()) {
+      try {
+        let sql = `SELECT * FROM rides`;
+        const params: unknown[] = [];
+        if (status) {
+          params.push(status);
+          sql += ` WHERE status = $1`;
+        }
+        sql += ` ORDER BY created_at DESC LIMIT 100`;
+
+        const res = await query<Ride>(sql, params);
+        const results: RideWithStops[] = [];
+        for (const ride of res.rows) {
+          const stopsRes = await query<RideStop>(
+            `SELECT * FROM ride_stops WHERE ride_id = $1 ORDER BY stop_order ASC`,
+            [ride.id]
+          );
+          results.push(await enrichRideWithDriver(ride, stopsRes.rows));
+        }
+        return results;
+      } catch (error) {
+        logger.error('Error getting all rides for admin', {
+          error: (error as Error).message,
+        });
+        throw error;
+      }
+    }
+
+    const results: RideWithStops[] = [];
+    for (const ride of memoryRides.values()) {
+      if (!status || ride.status === status) {
+        const stops = memoryRideStops.get(ride.id) || [];
+        results.push(await enrichRideWithDriver(ride, stops));
+      }
+    }
     return results.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   },
 

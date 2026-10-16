@@ -185,4 +185,129 @@ export const rideController = {
       next(error);
     }
   },
+
+  /**
+   * POST /api/rides/:id/cancel
+   * Cancel an active ride request (Rider or Admin)
+   */
+  async cancelRide(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Auth required' } });
+        return;
+      }
+
+      const { id } = req.params;
+      const { reason } = req.body || {};
+
+      const cancelled = await rideService.cancelRide(id, req.user.id, reason);
+      if (!cancelled) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'CANCEL_FAILED', message: 'Cannot cancel this ride. It may be already in progress or completed.' },
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        message: 'Ride cancelled successfully.',
+        data: cancelled,
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  /**
+   * POST /api/rides/:id/pay
+   * Process payment (Stripe test-mode / Card)
+   */
+  async processPayment(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Auth required' } });
+        return;
+      }
+
+      const { id } = req.params;
+      const { paymentMethod = 'card', stripeToken, promoCode } = req.body || {};
+
+      const result = await rideService.processPayment(id, req.user.id, paymentMethod, stripeToken, promoCode);
+
+      res.status(200).json({
+        success: true,
+        message: 'Payment processed successfully.',
+        data: result,
+      });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        error: { code: 'PAYMENT_FAILED', message: (error as Error).message },
+      });
+    }
+  },
+
+  /**
+   * POST /api/rides/:id/review
+   * Submit post-trip 1-5 star review and feedback
+   */
+  async submitReview(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Auth required' } });
+        return;
+      }
+
+      const { id } = req.params;
+      const { rating, comment } = req.body || {};
+
+      if (!rating || rating < 1 || rating > 5) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_RATING', message: 'Rating must be an integer between 1 and 5' },
+        });
+        return;
+      }
+
+      const review = await rideService.submitReview(id, req.user.id, Number(rating), comment);
+
+      res.status(200).json({
+        success: true,
+        message: 'Thank you for your rating and review!',
+        data: review,
+      });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        error: { code: 'REVIEW_FAILED', message: (error as Error).message },
+      });
+    }
+  },
+
+  /**
+   * GET /api/rides/:id/receipt
+   * Get official transaction receipt for completed trip
+   */
+  async getReceipt(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Auth required' } });
+        return;
+      }
+
+      const { id } = req.params;
+      const receipt = await rideService.getReceipt(id, req.user.id);
+
+      res.status(200).json({
+        success: true,
+        data: receipt,
+      });
+    } catch (error) {
+      res.status(404).json({
+        success: false,
+        error: { code: 'RECEIPT_NOT_FOUND', message: (error as Error).message },
+      });
+    }
+  },
 };

@@ -3,6 +3,10 @@ import healthRoutes from './health.routes.ts';
 import authRoutes from './auth.routes.ts';
 import rideRoutes from './ride.routes.ts';
 import driverRoutes from './driver.routes.ts';
+import adminRoutes from './admin.routes.ts';
+import supportRoutes from './support.routes.ts';
+import promoRoutes from './promo.routes.ts';
+import notificationRoutes from './notification.routes.ts';
 
 const apiRouter = Router();
 
@@ -17,6 +21,18 @@ apiRouter.use('/rides', rideRoutes);
 
 // Mount driver routes under /api/driver
 apiRouter.use('/driver', driverRoutes);
+
+// Mount admin routes under /api/admin
+apiRouter.use('/admin', adminRoutes);
+
+// Mount support routes under /api/support
+apiRouter.use('/support', supportRoutes);
+
+// Mount promo code routes under /api/promos
+apiRouter.use('/promos', promoRoutes);
+
+// Mount notification routes under /api/notifications
+apiRouter.use('/notifications', notificationRoutes);
 
 // Public config route for client-side public API keys (Google Maps Platform browser key)
 apiRouter.get('/config/maps', (_req, res) => {

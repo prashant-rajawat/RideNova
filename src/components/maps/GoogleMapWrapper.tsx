@@ -41,7 +41,7 @@ interface GoogleMapWrapperProps {
 const GOOGLE_MAPS_LIBRARIES: ('routes' | 'places' | 'marker')[] = ['routes', 'places', 'marker'];
 const INTERNAL_ATTRIBUTION_IDS: string[] = ['gmp_mcp_codeassist_v1_aistudio'];
 
-// Dark style theme for Google Maps to match RideNova #07111F
+// Dark style theme for Google Maps to match RideNova #FFFFFF
 const DARK_MAP_STYLES = [
   { elementType: 'geometry', stylers: [{ color: '#07111f' }] },
   { elementType: 'labels.text.stroke', stylers: [{ color: '#07111f' }] },
@@ -251,7 +251,7 @@ const RealRoutesRenderer: React.FC<{
         fallbackPolylineRef.current = new (window as any).google.maps.Polyline({
           path: fallbackPoints,
           geodesic: true,
-          strokeColor: '#00C2FF',
+          strokeColor: '#E21D2B',
           strokeOpacity: 0.85,
           strokeWeight: 4,
           map,
@@ -295,7 +295,7 @@ const RealRoutesRenderer: React.FC<{
               realPolylineRef.current = new (window as any).google.maps.Polyline({
                 path: decodedPoints,
                 geodesic: true,
-                strokeColor: '#00C2FF',
+                strokeColor: '#E21D2B',
                 strokeOpacity: 0.95,
                 strokeWeight: 5,
                 map,
@@ -439,7 +439,7 @@ export const GoogleMapWrapper: React.FC<GoogleMapWrapperProps> = ({
         lng: pickup.longitude,
         label: 'P',
         title: `Pickup: ${pickup.address}`,
-        color: '#22C55E',
+        color: '#15803D',
       });
     }
 
@@ -453,7 +453,7 @@ export const GoogleMapWrapper: React.FC<GoogleMapWrapperProps> = ({
         lng: s.longitude,
         label: `S${s.stopOrder}`,
         title: `Stop ${s.stopOrder}: ${s.address}`,
-        color: '#F59E0B',
+        color: '#B45309',
       });
     });
 
@@ -463,7 +463,7 @@ export const GoogleMapWrapper: React.FC<GoogleMapWrapperProps> = ({
         lng: destination.longitude,
         label: 'D',
         title: `Destination: ${destination.address}`,
-        color: '#00C2FF',
+        color: '#E21D2B',
       });
     }
 
@@ -504,7 +504,7 @@ export const GoogleMapWrapper: React.FC<GoogleMapWrapperProps> = ({
   if (isKeyConfigured && !hasAuthError && !hasLoadError) {
     return (
       <div
-        className={`relative w-full h-full min-h-[400px] rounded-xl overflow-hidden border border-[#1E334D] bg-[#07111F] ${className}`}
+        className={`relative w-full h-full min-h-[400px] rounded-xl overflow-hidden border border-[#E5E5E5] bg-[#FFFFFF] ${className}`}
       >
         <APIProvider
           apiKey={activeApiKey}
@@ -546,7 +546,7 @@ export const GoogleMapWrapper: React.FC<GoogleMapWrapperProps> = ({
                 zIndex={point.label === 'P' ? 100 : point.label === 'D' ? 90 : 50 + index}
               >
                 <div
-                  className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-black text-[#07111F] shadow-lg border-2 border-white transition-transform hover:scale-125 cursor-pointer"
+                  className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-black text-[#FFFFFF] shadow-lg border-2 border-white transition-transform hover:scale-125 cursor-pointer"
                   style={{ backgroundColor: point.color }}
                 >
                   {point.label}
@@ -559,27 +559,27 @@ export const GoogleMapWrapper: React.FC<GoogleMapWrapperProps> = ({
         {/* Floating Route Stats Overlay */}
         {(distanceKm !== null && durationMinutes !== null) || isRouteLoading ? (
           <div className="absolute top-4 left-4 z-10 flex flex-col gap-1.5 pointer-events-none">
-            <div className="flex items-center gap-3 rounded-lg border border-[#1E334D] bg-[#0F1C2E]/95 px-4 py-2.5 backdrop-blur-md shadow-xl text-xs pointer-events-auto">
+            <div className="flex items-center gap-3 rounded-lg border border-[#E5E5E5] bg-[#FFFFFF]/95 px-4 py-2.5 backdrop-blur-md shadow-xl text-xs pointer-events-auto">
               {isRouteLoading ? (
-                <div className="flex items-center gap-2 text-[#00C2FF] font-medium">
-                  <div className="h-3 w-3 rounded-full border-2 border-[#00C2FF] border-t-transparent animate-spin" />
+                <div className="flex items-center gap-2 text-[#E21D2B] font-medium">
+                  <div className="h-3 w-3 rounded-full border-2 border-[#E21D2B] border-t-transparent animate-spin" />
                   <span>Calculating Google Route...</span>
                 </div>
               ) : (
                 <>
-                  <div className="flex items-center gap-1.5 text-[#00C2FF] font-semibold">
+                  <div className="flex items-center gap-1.5 text-[#E21D2B] font-semibold">
                     <Navigation className="h-4 w-4" />
                     <span>{distanceKm} km</span>
                   </div>
-                  <span className="text-[#8FA6BF]">·</span>
-                  <span className="text-[#E5F2FF] font-medium">{durationMinutes} min</span>
-                  <span className="text-[#8FA6BF]">·</span>
+                  <span className="text-[#737373]">·</span>
+                  <span className="text-[#171717] font-medium">{durationMinutes} min</span>
+                  <span className="text-[#737373]">·</span>
                   {isRealRoute ? (
-                    <span className="text-[11px] text-[#22C55E] flex items-center gap-1 font-medium">
+                    <span className="text-[11px] text-[#15803D] flex items-center gap-1 font-medium">
                       <ShieldCheck className="h-3.5 w-3.5" /> Real Google Route
                     </span>
                   ) : (
-                    <span className="text-[11px] text-[#F59E0B] flex items-center gap-1 font-medium">
+                    <span className="text-[11px] text-[#B45309] flex items-center gap-1 font-medium">
                       <Info className="h-3.5 w-3.5" /> Fallback Estimate
                     </span>
                   )}
@@ -589,8 +589,8 @@ export const GoogleMapWrapper: React.FC<GoogleMapWrapperProps> = ({
 
             {/* Error badge if Google routing reported a problem */}
             {routeError && !isRouteLoading && (
-              <div className="flex items-center gap-1.5 rounded-lg border border-[#EF4444]/40 bg-[#EF4444]/15 px-3 py-1.5 text-[11px] text-[#FCA5A5] backdrop-blur-md pointer-events-auto">
-                <AlertTriangle className="h-3 w-3 shrink-0 text-[#EF4444]" />
+              <div className="flex items-center gap-1.5 rounded-lg border border-[#B91C1C]/40 bg-[#B91C1C]/15 px-3 py-1.5 text-[11px] text-[#FCA5A5] backdrop-blur-md pointer-events-auto">
+                <AlertTriangle className="h-3 w-3 shrink-0 text-[#B91C1C]" />
                 <span>{routeError}</span>
               </div>
             )}
@@ -603,13 +603,13 @@ export const GoogleMapWrapper: React.FC<GoogleMapWrapperProps> = ({
   // Fallback state: Render the appropriate notice and interactive coordinates canvas
   return (
     <div
-      className={`relative w-full h-full min-h-[400px] flex flex-col justify-between rounded-xl border border-[#1E334D] bg-[#07111F] p-6 ${className}`}
+      className={`relative w-full h-full min-h-[400px] flex flex-col justify-between rounded-xl border border-[#E5E5E5] bg-[#FFFFFF] p-6 ${className}`}
     >
       {/* Alert Banner: Differentiates Auth Failure, Network Failure, and Missing Key */}
       {hasAuthError ? (
-        <div className="rounded-lg border border-[#EF4444]/40 bg-[#EF4444]/10 p-4 text-xs text-[#EF4444]">
+        <div className="rounded-lg border border-[#B91C1C]/40 bg-[#B91C1C]/10 p-4 text-xs text-[#B91C1C]">
           <div className="flex items-start gap-2.5">
-            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-[#EF4444]" />
+            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-[#B91C1C]" />
             <div>
               <p className="font-semibold text-[#FCA5A5]">
                 Google Maps API Authentication Failed (AUTH_FAILURE)
@@ -626,9 +626,9 @@ export const GoogleMapWrapper: React.FC<GoogleMapWrapperProps> = ({
           </div>
         </div>
       ) : hasLoadError ? (
-        <div className="rounded-lg border border-[#EF4444]/40 bg-[#EF4444]/10 p-4 text-xs text-[#EF4444]">
+        <div className="rounded-lg border border-[#B91C1C]/40 bg-[#B91C1C]/10 p-4 text-xs text-[#B91C1C]">
           <div className="flex items-start gap-2.5">
-            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-[#EF4444]" />
+            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-[#B91C1C]" />
             <div>
               <p className="font-semibold text-[#FCA5A5]">
                 Google Maps Script Loading Failed (FAILED)
@@ -640,16 +640,16 @@ export const GoogleMapWrapper: React.FC<GoogleMapWrapperProps> = ({
           </div>
         </div>
       ) : (
-        <div className="rounded-lg border border-[#F59E0B]/30 bg-[#F59E0B]/10 p-4 text-xs text-[#F59E0B]">
+        <div className="rounded-lg border border-[#B45309]/30 bg-[#B45309]/10 p-4 text-xs text-[#B45309]">
           <div className="flex items-start gap-2.5">
             <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
             <div>
-              <p className="font-semibold text-[#E5F2FF]">
+              <p className="font-semibold text-[#171717]">
                 Google Maps is not configured. Please add NEXT_PUBLIC_GOOGLE_MAPS_API_KEY.
               </p>
-              <p className="mt-1 text-[11px] text-[#8FA6BF] leading-relaxed">
+              <p className="mt-1 text-[11px] text-[#737373] leading-relaxed">
                 To enable live satellite tiles, autocomplete, and live turn-by-turn Directions, set{' '}
-                <code className="text-[#00C2FF] font-mono">NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code> in
+                <code className="text-[#E21D2B] font-mono">NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code> in
                 your environment.
               </p>
             </div>
@@ -658,31 +658,31 @@ export const GoogleMapWrapper: React.FC<GoogleMapWrapperProps> = ({
       )}
 
       {/* Interactive Waypoints / Route Visualization Canvas */}
-      <div className="my-6 flex-1 rounded-lg border border-[#1E334D] bg-[#050C16] p-5 flex flex-col justify-center relative overflow-hidden">
+      <div className="my-6 flex-1 rounded-lg border border-[#E5E5E5] bg-[#050C16] p-5 flex flex-col justify-center relative overflow-hidden">
         {/* Subtle coordinate grid lines */}
-        <div className="absolute inset-0 bg-[radial-gradient(#1E334D_1px,transparent_1px)] [background-size:16px_16px] opacity-30 pointer-events-none" />
+        <div className="absolute inset-0 bg-[radial-gradient(#E5E5E5_1px,transparent_1px)] [background-size:16px_16px] opacity-30 pointer-events-none" />
 
         {waypoints.length === 0 ? (
           <div className="text-center py-10 z-10">
-            <MapPin className="mx-auto h-8 w-8 text-[#8FA6BF] mb-2 animate-bounce" />
-            <h4 className="text-sm font-semibold text-[#E5F2FF]">Interactive Route Canvas</h4>
-            <p className="mt-1 text-xs text-[#8FA6BF] max-w-sm mx-auto">
+            <MapPin className="mx-auto h-8 w-8 text-[#737373] mb-2 animate-bounce" />
+            <h4 className="text-sm font-semibold text-[#171717]">Interactive Route Canvas</h4>
+            <p className="mt-1 text-xs text-[#737373] max-w-sm mx-auto">
               Select a pickup location and destination in the booking panel to generate coordinates,
               distance, and fare.
             </p>
           </div>
         ) : (
           <div className="space-y-4 z-10">
-            <div className="flex items-center justify-between pb-3 border-b border-[#1E334D]/60 text-xs">
-              <span className="text-[#8FA6BF] font-medium flex items-center gap-1.5">
-                <Navigation className="h-3.5 w-3.5 text-[#00C2FF]" />
+            <div className="flex items-center justify-between pb-3 border-b border-[#E5E5E5]/60 text-xs">
+              <span className="text-[#737373] font-medium flex items-center gap-1.5">
+                <Navigation className="h-3.5 w-3.5 text-[#E21D2B]" />
                 Calculated Route Waypoints ({waypoints.length})
               </span>
               {distanceKm !== null && durationMinutes !== null && (
-                <div className="flex items-center gap-2 font-mono text-[#00C2FF]">
+                <div className="flex items-center gap-2 font-mono text-[#E21D2B]">
                   <span className="font-bold">{distanceKm} km</span>
-                  <span className="text-[#8FA6BF]">·</span>
-                  <span className="text-[#E5F2FF]">{durationMinutes} min ETA</span>
+                  <span className="text-[#737373]">·</span>
+                  <span className="text-[#171717]">{durationMinutes} min ETA</span>
                 </div>
               )}
             </div>
@@ -692,18 +692,18 @@ export const GoogleMapWrapper: React.FC<GoogleMapWrapperProps> = ({
               {waypoints.map((pt, idx) => (
                 <div
                   key={idx}
-                  className="flex items-center justify-between p-2.5 rounded-lg border border-[#1E334D] bg-[#07111F]/90 text-xs"
+                  className="flex items-center justify-between p-2.5 rounded-lg border border-[#E5E5E5] bg-[#FFFFFF]/90 text-xs"
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
                     <span
-                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-black text-[#07111F]"
+                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-black text-[#FFFFFF]"
                       style={{ backgroundColor: pt.color }}
                     >
                       {pt.label}
                     </span>
-                    <span className="text-[#E5F2FF] font-medium truncate">{pt.title}</span>
+                    <span className="text-[#171717] font-medium truncate">{pt.title}</span>
                   </div>
-                  <span className="font-mono text-[11px] text-[#8FA6BF] shrink-0 ml-2">
+                  <span className="font-mono text-[11px] text-[#737373] shrink-0 ml-2">
                     {pt.lat.toFixed(4)}, {pt.lng.toFixed(4)}
                   </span>
                 </div>
@@ -711,10 +711,10 @@ export const GoogleMapWrapper: React.FC<GoogleMapWrapperProps> = ({
             </div>
 
             {/* Simulated Vector Path */}
-            <div className="mt-4 pt-3 border-t border-[#1E334D]/60 flex items-center justify-between text-[11px] text-[#8FA6BF]">
+            <div className="mt-4 pt-3 border-t border-[#E5E5E5]/60 flex items-center justify-between text-[11px] text-[#737373]">
               <span>Haversine road-factor calculation active</span>
-              <span className="text-[#22C55E] flex items-center gap-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#22C55E]" />
+              <span className="text-[#15803D] flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#15803D]" />
                 Coordinates Validated
               </span>
             </div>
@@ -723,13 +723,13 @@ export const GoogleMapWrapper: React.FC<GoogleMapWrapperProps> = ({
       </div>
 
       {/* Cloud Console Setup Guide */}
-      <div className="rounded-lg border border-[#1E334D] bg-[#0F1C2E] p-4 text-xs text-[#8FA6BF] space-y-1.5">
-        <div className="flex items-center justify-between text-[#E5F2FF] font-semibold">
+      <div className="rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] p-4 text-xs text-[#737373] space-y-1.5">
+        <div className="flex items-center justify-between text-[#171717] font-semibold">
           <span className="flex items-center gap-1.5 text-xs">
-            <Info className="h-3.5 w-3.5 text-[#00C2FF]" />
+            <Info className="h-3.5 w-3.5 text-[#E21D2B]" />
             How to configure Google Cloud Platform:
           </span>
-          <span className="font-mono text-[10px] text-[#00C2FF]">Step 3A Guide</span>
+          <span className="font-mono text-[10px] text-[#E21D2B]">Step 3A Guide</span>
         </div>
         <p className="text-[11px] leading-relaxed">
           1. Go to <strong>Google Cloud Console → APIs & Services → Credentials</strong>.<br />

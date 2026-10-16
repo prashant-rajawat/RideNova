@@ -14,10 +14,15 @@ import {
   Loader2,
   Crosshair,
   Sparkles,
+  Tag,
+  Calendar,
+  Ticket,
+  Check,
+  X,
 } from 'lucide-react';
 import { GoogleMapWrapper, LocationPoint, StopPoint } from '../maps/GoogleMapWrapper.tsx';
 import { calculateDistanceKm, estimateDurationMinutes, calculateFare, FARE_CONFIG } from '../../lib/fare.ts';
-import { VehicleType, RideWithStops, RouteSource } from '../../types/index.ts';
+import { VehicleType, RideWithStops, RouteSource, PromoCode } from '../../types/index.ts';
 import { api, ApiError } from '../../lib/api.ts';
 import { useAuthSession } from '../../context/AuthContext.tsx';
 
@@ -109,6 +114,23 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [confirmedRide, setConfirmedRide] = useState<RideWithStops | null>(null);
+
+  // Scheduling Option
+  const [isScheduled, setIsScheduled] = useState<boolean>(false);
+  const [scheduledDate, setScheduledDate] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().split('T')[0];
+  });
+  const [scheduledTime, setScheduledTime] = useState<string>('09:30');
+
+  // Promo Code States
+  const [promoCodeInput, setPromoCodeInput] = useState<string>('');
+  const [appliedPromo, setAppliedPromo] = useState<string | null>(null);
+  const [promoDiscount, setPromoDiscount] = useState<number>(0);
+  const [promoMessage, setPromoMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [isValidatingPromo, setIsValidatingPromo] = useState<boolean>(false);
+  const [availablePromos, setAvailablePromos] = useState<PromoCode[]>([]);
 
   // Suggestions Dropdowns & Predictions
   const [activeSuggestionField, setActiveSuggestionField] = useState<'pickup' | 'dest' | number | null>(null);
@@ -411,12 +433,71 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
     });
   };
 
+  // Load available promo codes on mount
+  useEffect(() => {
+    api
+      .getPromos()
+      .then((res) => {
+        if (res?.data) {
+          setAvailablePromos(res.data);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Promo Code Validation Handler
+  const handleApplyPromo = async (codeToApply?: string) => {
+    const code = (codeToApply || promoCodeInput).trim().toUpperCase();
+    if (!code) {
+      setPromoMessage({ type: 'error', text: 'Please enter a coupon code.' });
+      return;
+    }
+    const baselineFare = activeFare?.estimatedFare || 100;
+    setIsValidatingPromo(true);
+    setPromoMessage(null);
+    try {
+      const res = await api.validatePromo(code, baselineFare);
+      if (res.data?.valid) {
+        setAppliedPromo(code);
+        setPromoDiscount(res.data.discount);
+        setPromoMessage({
+          type: 'success',
+          text: res.data.message || `Code ${code} applied! Saved ₹${res.data.discount}`,
+        });
+      } else {
+        setPromoMessage({
+          type: 'error',
+          text: res.data?.message || 'Invalid or expired coupon code.',
+        });
+      }
+    } catch (err: any) {
+      setPromoMessage({
+        type: 'error',
+        text: err.message || 'Failed to validate promo code.',
+      });
+    } finally {
+      setIsValidatingPromo(false);
+    }
+  };
+
+  const handleRemovePromo = () => {
+    setAppliedPromo(null);
+    setPromoDiscount(0);
+    setPromoCodeInput('');
+    setPromoMessage(null);
+  };
+
   // Confirm and create ride request
   const handleConfirmRide = async () => {
     if (!pickup || !destination || isSubmitting) return;
 
     setIsSubmitting(true);
     setBookingError(null);
+
+    const scheduledTimestamp =
+      isScheduled && scheduledDate && scheduledTime
+        ? new Date(`${scheduledDate}T${scheduledTime}:00`).toISOString()
+        : undefined;
 
     try {
       const response = await api.createRide({
@@ -433,6 +514,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
           longitude: s.longitude,
           stopOrder: s.stopOrder,
         })),
+        scheduledAt: scheduledTimestamp,
       });
 
       if (response.success && response.data) {
@@ -461,6 +543,10 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
     ]);
     setConfirmedRide(null);
     setBookingError(null);
+    setAppliedPromo(null);
+    setPromoDiscount(0);
+    setPromoMessage(null);
+    setIsScheduled(false);
   };
 
   // Calculated fare details
@@ -473,65 +559,65 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
   if (confirmedRide) {
     return (
       <div className="min-h-[85vh] max-w-4xl mx-auto px-4 py-8">
-        <div className="rounded-xl border border-[#22C55E]/30 bg-[#0F1C2E] p-6 sm:p-8 shadow-2xl text-center animate-fade-in">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#22C55E]/10 text-[#22C55E]">
+        <div className="rounded-xl border border-[#15803D]/30 bg-[#FFFFFF] p-6 sm:p-8 shadow-2xl text-center animate-fade-in">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#15803D]/10 text-[#15803D]">
             <CheckCircle className="h-8 w-8" />
           </div>
 
-          <span className="mt-4 inline-flex items-center px-3 py-1 rounded-full text-xs font-mono font-bold bg-[#00C2FF]/10 text-[#00C2FF] border border-[#00C2FF]/30">
+          <span className="mt-4 inline-flex items-center px-3 py-1 rounded-full text-xs font-mono font-bold bg-[#E21D2B]/10 text-[#E21D2B] border border-[#E21D2B]/30">
             {confirmedRide.reference_id || `RN-${confirmedRide.id.slice(0, 8).toUpperCase()}`}
           </span>
 
-          <h1 className="mt-3 text-2xl sm:text-3xl font-extrabold text-[#E5F2FF]">
+          <h1 className="mt-3 text-2xl sm:text-3xl font-extrabold text-[#171717]">
             Ride Requested Successfully
           </h1>
 
-          <p className="mt-2 text-xs text-[#8FA6BF]">
+          <p className="mt-2 text-xs text-[#737373]">
             Your ride request has been saved in the PostgreSQL database with status:
           </p>
 
-          <div className="mt-3 inline-flex items-center gap-2 px-4 py-1.5 rounded-lg border border-[#F59E0B]/30 bg-[#F59E0B]/10 text-xs font-semibold text-[#F59E0B]">
+          <div className="mt-3 inline-flex items-center gap-2 px-4 py-1.5 rounded-lg border border-[#B45309]/30 bg-[#B45309]/10 text-xs font-semibold text-[#B45309]">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
             <span>Status: Searching for a driver... (requested)</span>
           </div>
 
           {/* Ride Details Card */}
-          <div className="mt-6 rounded-lg border border-[#1E334D] bg-[#07111F] p-5 text-left text-xs space-y-3">
-            <div className="flex items-start justify-between pb-3 border-b border-[#1E334D]">
+          <div className="mt-6 rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] p-5 text-left text-xs space-y-3">
+            <div className="flex items-start justify-between pb-3 border-b border-[#E5E5E5]">
               <div>
-                <span className="text-[#8FA6BF] block text-[11px]">Database Record UUID</span>
-                <span className="font-mono text-[#E5F2FF] break-all">{confirmedRide.id}</span>
+                <span className="text-[#737373] block text-[11px]">Database Record UUID</span>
+                <span className="font-mono text-[#171717] break-all">{confirmedRide.id}</span>
               </div>
               <div className="text-right">
-                <span className="text-[#8FA6BF] block text-[11px]">Estimated Fare</span>
-                <span className="font-bold text-[#00C2FF] text-sm">₹{confirmedRide.estimated_fare}</span>
+                <span className="text-[#737373] block text-[11px]">Estimated Fare</span>
+                <span className="font-bold text-[#E21D2B] text-sm">₹{confirmedRide.estimated_fare}</span>
               </div>
             </div>
 
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-[#22C55E]" />
-                <span className="text-[#8FA6BF]">Pickup:</span>
-                <span className="text-[#E5F2FF] font-medium">{confirmedRide.pickup_address}</span>
+                <span className="h-2 w-2 rounded-full bg-[#15803D]" />
+                <span className="text-[#737373]">Pickup:</span>
+                <span className="text-[#171717] font-medium">{confirmedRide.pickup_address}</span>
               </div>
 
               {confirmedRide.stops?.map((s) => (
                 <div key={s.id} className="flex items-center gap-2 pl-2">
-                  <span className="h-2 w-2 rounded-full bg-[#F59E0B]" />
-                  <span className="text-[#8FA6BF]">Stop {s.stop_order}:</span>
-                  <span className="text-[#E5F2FF]">{s.address}</span>
+                  <span className="h-2 w-2 rounded-full bg-[#B45309]" />
+                  <span className="text-[#737373]">Stop {s.stop_order}:</span>
+                  <span className="text-[#171717]">{s.address}</span>
                 </div>
               ))}
 
               <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-[#00C2FF]" />
-                <span className="text-[#8FA6BF]">Destination:</span>
-                <span className="text-[#E5F2FF] font-medium">{confirmedRide.destination_address}</span>
+                <span className="h-2 w-2 rounded-full bg-[#E21D2B]" />
+                <span className="text-[#737373]">Destination:</span>
+                <span className="text-[#171717] font-medium">{confirmedRide.destination_address}</span>
               </div>
             </div>
 
-            <div className="pt-3 border-t border-[#1E334D] flex flex-wrap items-center justify-between text-[11px] text-[#8FA6BF]">
-              <span>Ride Type: <strong className="text-[#E5F2FF] uppercase">{confirmedRide.ride_type}</strong></span>
+            <div className="pt-3 border-t border-[#E5E5E5] flex flex-wrap items-center justify-between text-[11px] text-[#737373]">
+              <span>Ride Type: <strong className="text-[#171717] uppercase">{confirmedRide.ride_type}</strong></span>
               <span>Distance: <strong>{confirmedRide.distance_km} km</strong></span>
               <span>Estimated Duration: <strong>{confirmedRide.estimated_duration_minutes} min</strong></span>
             </div>
@@ -540,13 +626,13 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
           <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
             <button
               onClick={() => onNavigate('rider')}
-              className="w-full sm:w-auto rounded-lg bg-[#00C2FF] px-6 py-2.5 text-xs font-semibold text-[#07111F] hover:bg-[#00C2FF]/90 transition-all shadow-md shadow-[#00C2FF]/20"
+              className="w-full sm:w-auto rounded-lg bg-[#E21D2B] px-6 py-2.5 text-xs font-semibold text-[#FFFFFF] hover:bg-[#E21D2B]/90 transition-all shadow-md shadow-[#E21D2B]/20"
             >
               Return to Rider Dashboard
             </button>
             <button
               onClick={handleReset}
-              className="w-full sm:w-auto rounded-lg border border-[#1E334D] bg-[#07111F] px-6 py-2.5 text-xs font-semibold text-[#E5F2FF] hover:border-[#00C2FF]"
+              className="w-full sm:w-auto rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] px-6 py-2.5 text-xs font-semibold text-[#171717] hover:border-[#E21D2B]"
             >
               Book Another Ride
             </button>
@@ -559,19 +645,19 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
   return (
     <div className="min-h-[85vh] max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
       {/* Top Banner */}
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[#1E334D]">
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[#E5E5E5]">
         <div>
-          <span className="text-xs font-semibold text-[#00C2FF] uppercase tracking-wider">
+          <span className="text-xs font-semibold text-[#E21D2B] uppercase tracking-wider">
             Step 3 Ride Booking Engine
           </span>
-          <h1 className="mt-1 text-2xl font-extrabold text-[#E5F2FF]">
+          <h1 className="mt-1 text-2xl font-extrabold text-[#171717]">
             Plan Your Route & Book a Ride
           </h1>
         </div>
 
         <button
           onClick={() => onNavigate('rider')}
-          className="self-start sm:self-auto rounded-lg border border-[#1E334D] bg-[#0F1C2E] px-4 py-2 text-xs font-medium text-[#8FA6BF] hover:text-[#E5F2FF]"
+          className="self-start sm:self-auto rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] px-4 py-2 text-xs font-medium text-[#737373] hover:text-[#171717]"
         >
           Back to Dashboard
         </button>
@@ -579,19 +665,19 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* Left Column: Route Configuration Panel */}
-        <div className="w-full lg:col-span-5 rounded-xl border border-[#1E334D] bg-[#0F1C2E] p-5 sm:p-6 shadow-xl space-y-5">
-          <div className="flex items-center justify-between border-b border-[#1E334D] pb-3">
-            <span className="text-xs font-bold uppercase tracking-wider text-[#E5F2FF]">
+        <div className="w-full lg:col-span-5 rounded-xl border border-[#E5E5E5] bg-[#FFFFFF] p-5 sm:p-6 shadow-xl space-y-5">
+          <div className="flex items-center justify-between border-b border-[#E5E5E5] pb-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-[#171717]">
               1. Route & Stops
             </span>
-            <span className="text-[11px] text-[#8FA6BF]">
+            <span className="text-[11px] text-[#737373]">
               {stops.length} stop{stops.length === 1 ? '' : 's'} added
             </span>
           </div>
 
           {/* Location Error Notice */}
           {locationError && (
-            <div className="rounded-lg border border-[#F59E0B]/30 bg-[#F59E0B]/10 p-2.5 text-xs text-[#F59E0B] flex items-start gap-2">
+            <div className="rounded-lg border border-[#B45309]/30 bg-[#B45309]/10 p-2.5 text-xs text-[#B45309] flex items-start gap-2">
               <Info className="h-4 w-4 shrink-0 mt-0.5" />
               <span>{locationError}</span>
             </div>
@@ -599,7 +685,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
 
           {/* Booking Error Notice */}
           {bookingError && (
-            <div className="rounded-lg border border-[#EF4444]/30 bg-[#EF4444]/10 p-3 text-xs text-[#EF4444] flex items-start gap-2">
+            <div className="rounded-lg border border-[#B91C1C]/30 bg-[#B91C1C]/10 p-3 text-xs text-[#B91C1C] flex items-start gap-2">
               <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
               <span>{bookingError}</span>
             </div>
@@ -610,8 +696,8 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
             {/* Pickup Location */}
             <div className="relative">
               <div className="flex items-center justify-between mb-1">
-                <label className="text-xs font-semibold text-[#E5F2FF] flex items-center gap-1.5">
-                  <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#22C55E] text-[10px] font-bold text-[#07111F]">
+                <label className="text-xs font-semibold text-[#171717] flex items-center gap-1.5">
+                  <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#15803D] text-[10px] font-bold text-[#FFFFFF]">
                     P
                   </span>
                   Pickup Location
@@ -620,7 +706,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
                   type="button"
                   onClick={handleUseCurrentLocation}
                   disabled={isLocating}
-                  className="flex items-center gap-1 text-[11px] text-[#00C2FF] hover:underline disabled:opacity-50"
+                  className="flex items-center gap-1 text-[11px] text-[#E21D2B] hover:underline disabled:opacity-50"
                 >
                   <Crosshair className={`h-3 w-3 ${isLocating ? 'animate-spin' : ''}`} />
                   <span>{isLocating ? 'Locating...' : 'Use Current Location'}</span>
@@ -643,16 +729,16 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
                       setActiveSuggestionField(null);
                     }
                   }}
-                  className="w-full rounded-lg border border-[#1E334D] bg-[#07111F] px-3.5 py-2.5 text-xs text-[#E5F2FF] placeholder-[#8FA6BF]/50 focus:border-[#00C2FF] focus:outline-none"
+                  className="w-full rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] px-3.5 py-2.5 text-xs text-[#171717] placeholder-[#737373]/50 focus:border-[#E21D2B] focus:outline-none"
                 />
               </div>
 
               {/* Suggestions Dropdown */}
               {activeSuggestionField === 'pickup' && (
-                <div className="absolute left-0 right-0 top-full mt-1 z-30 rounded-lg border border-[#1E334D] bg-[#0F1C2E] p-2 shadow-2xl max-h-52 overflow-y-auto">
+                <div className="absolute left-0 right-0 top-full mt-1 z-30 rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] p-2 shadow-2xl max-h-52 overflow-y-auto">
                   {googlePredictions.length > 0 && (
-                    <div className="mb-2 pb-2 border-b border-[#1E334D]">
-                      <span className="block px-2 py-1 text-[10px] font-semibold text-[#00C2FF] uppercase tracking-wider flex items-center gap-1">
+                    <div className="mb-2 pb-2 border-b border-[#E5E5E5]">
+                      <span className="block px-2 py-1 text-[10px] font-semibold text-[#E21D2B] uppercase tracking-wider flex items-center gap-1">
                         <Sparkles className="h-3 w-3" /> Live Places Autocomplete
                       </span>
                       {googlePredictions.map((pred, pIdx) => {
@@ -662,16 +748,16 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
                             key={`pred-${pIdx}`}
                             type="button"
                             onClick={() => handleSelectGooglePrediction('pickup', pred)}
-                            className="w-full text-left px-2.5 py-1.5 text-xs text-[#E5F2FF] hover:bg-[#1E334D] rounded-md transition-colors flex items-center gap-2"
+                            className="w-full text-left px-2.5 py-1.5 text-xs text-[#171717] hover:bg-[#E5E5E5] rounded-md transition-colors flex items-center gap-2"
                           >
-                            <MapPin className="h-3.5 w-3.5 text-[#00C2FF] shrink-0" />
+                            <MapPin className="h-3.5 w-3.5 text-[#E21D2B] shrink-0" />
                             <span className="truncate">{sugText}</span>
                           </button>
                         );
                       })}
                     </div>
                   )}
-                  <span className="block px-2 py-1 text-[10px] font-semibold text-[#8FA6BF] uppercase tracking-wider">
+                  <span className="block px-2 py-1 text-[10px] font-semibold text-[#737373] uppercase tracking-wider">
                     Recommended Locations
                   </span>
                   {SUGGESTED_PLACES.filter(
@@ -681,9 +767,9 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
                       key={idx}
                       type="button"
                       onClick={() => handleSelectSuggestion('pickup', place)}
-                      className="w-full text-left px-2.5 py-1.5 text-xs text-[#E5F2FF] hover:bg-[#1E334D] rounded-md transition-colors flex items-center gap-2"
+                      className="w-full text-left px-2.5 py-1.5 text-xs text-[#171717] hover:bg-[#E5E5E5] rounded-md transition-colors flex items-center gap-2"
                     >
-                      <MapPin className="h-3.5 w-3.5 text-[#22C55E] shrink-0" />
+                      <MapPin className="h-3.5 w-3.5 text-[#15803D] shrink-0" />
                       <span className="truncate">{place.address}</span>
                     </button>
                   ))}
@@ -691,9 +777,9 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
                     <button
                       type="button"
                       onClick={() => handleResolveManualAddress('pickup', pickupInput)}
-                      className="w-full text-left px-2.5 py-1.5 mt-1 border-t border-[#1E334D]/80 text-xs text-[#00C2FF] hover:bg-[#1E334D] rounded-md transition-colors flex items-center gap-2"
+                      className="w-full text-left px-2.5 py-1.5 mt-1 border-t border-[#E5E5E5]/80 text-xs text-[#E21D2B] hover:bg-[#E5E5E5] rounded-md transition-colors flex items-center gap-2"
                     >
-                      <MapPin className="h-3.5 w-3.5 text-[#00C2FF] shrink-0" />
+                      <MapPin className="h-3.5 w-3.5 text-[#E21D2B] shrink-0" />
                       <span className="truncate">Use &ldquo;{pickupInput.trim()}&rdquo;</span>
                     </button>
                   )}
@@ -703,10 +789,10 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
 
             {/* Intermediate Stops (Max 3) */}
             {stops.map((stop) => (
-              <div key={stop.stopOrder} className="relative pl-3 border-l-2 border-[#1E334D] ml-2">
+              <div key={stop.stopOrder} className="relative pl-3 border-l-2 border-[#E5E5E5] ml-2">
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-semibold text-[#E5F2FF] flex items-center gap-1.5">
-                    <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#F59E0B] text-[10px] font-bold text-[#07111F]">
+                  <label className="text-xs font-semibold text-[#171717] flex items-center gap-1.5">
+                    <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#B45309] text-[10px] font-bold text-[#FFFFFF]">
                       S{stop.stopOrder}
                     </span>
                     Stop {stop.stopOrder}
@@ -718,7 +804,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
                           type="button"
                           onClick={() => handleMoveStop(stop.stopOrder, 'up')}
                           disabled={stop.stopOrder === 1}
-                          className="px-1.5 py-0.5 rounded text-[10px] bg-[#1E334D] text-[#8FA6BF] hover:text-[#E5F2FF] hover:bg-[#1E334D]/80 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                          className="px-1.5 py-0.5 rounded text-[10px] bg-[#E5E5E5] text-[#737373] hover:text-[#171717] hover:bg-[#E5E5E5]/80 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                           title="Move stop up"
                         >
                           ↑
@@ -727,7 +813,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
                           type="button"
                           onClick={() => handleMoveStop(stop.stopOrder, 'down')}
                           disabled={stop.stopOrder === stops.length}
-                          className="px-1.5 py-0.5 rounded text-[10px] bg-[#1E334D] text-[#8FA6BF] hover:text-[#E5F2FF] hover:bg-[#1E334D]/80 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                          className="px-1.5 py-0.5 rounded text-[10px] bg-[#E5E5E5] text-[#737373] hover:text-[#171717] hover:bg-[#E5E5E5]/80 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                           title="Move stop down"
                         >
                           ↓
@@ -737,7 +823,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
                     <button
                       type="button"
                       onClick={() => handleRemoveStop(stop.stopOrder)}
-                      className="flex items-center gap-1 text-[11px] text-[#EF4444] hover:underline"
+                      className="flex items-center gap-1 text-[11px] text-[#B91C1C] hover:underline"
                     >
                       <Trash2 className="h-3 w-3" />
                       <span>Remove</span>
@@ -763,15 +849,15 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
                         setActiveSuggestionField(null);
                       }
                     }}
-                    className="w-full rounded-lg border border-[#1E334D] bg-[#07111F] px-3.5 py-2.5 text-xs text-[#E5F2FF] focus:border-[#F59E0B] focus:outline-none"
+                    className="w-full rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] px-3.5 py-2.5 text-xs text-[#171717] focus:border-[#B45309] focus:outline-none"
                   />
                 </div>
 
                 {activeSuggestionField === stop.stopOrder && (
-                  <div className="absolute left-0 right-0 top-full mt-1 z-30 rounded-lg border border-[#1E334D] bg-[#0F1C2E] p-2 shadow-2xl max-h-52 overflow-y-auto">
+                  <div className="absolute left-0 right-0 top-full mt-1 z-30 rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] p-2 shadow-2xl max-h-52 overflow-y-auto">
                     {googlePredictions.length > 0 && (
-                      <div className="mb-2 pb-2 border-b border-[#1E334D]">
-                        <span className="block px-2 py-1 text-[10px] font-semibold text-[#00C2FF] uppercase tracking-wider flex items-center gap-1">
+                      <div className="mb-2 pb-2 border-b border-[#E5E5E5]">
+                        <span className="block px-2 py-1 text-[10px] font-semibold text-[#E21D2B] uppercase tracking-wider flex items-center gap-1">
                           <Sparkles className="h-3 w-3" /> Live Places Autocomplete
                         </span>
                         {googlePredictions.map((pred, pIdx) => {
@@ -781,16 +867,16 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
                               key={`pred-${pIdx}`}
                               type="button"
                               onClick={() => handleSelectGooglePrediction(stop.stopOrder, pred)}
-                              className="w-full text-left px-2.5 py-1.5 text-xs text-[#E5F2FF] hover:bg-[#1E334D] rounded-md transition-colors flex items-center gap-2"
+                              className="w-full text-left px-2.5 py-1.5 text-xs text-[#171717] hover:bg-[#E5E5E5] rounded-md transition-colors flex items-center gap-2"
                             >
-                              <MapPin className="h-3.5 w-3.5 text-[#00C2FF] shrink-0" />
+                              <MapPin className="h-3.5 w-3.5 text-[#E21D2B] shrink-0" />
                               <span className="truncate">{sugText}</span>
                             </button>
                           );
                         })}
                       </div>
                     )}
-                    <span className="block px-2 py-1 text-[10px] font-semibold text-[#8FA6BF] uppercase tracking-wider">
+                    <span className="block px-2 py-1 text-[10px] font-semibold text-[#737373] uppercase tracking-wider">
                       Recommended Locations
                     </span>
                     {SUGGESTED_PLACES.filter(
@@ -800,9 +886,9 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
                         key={idx}
                         type="button"
                         onClick={() => handleSelectSuggestion(stop.stopOrder, place)}
-                        className="w-full text-left px-2.5 py-1.5 text-xs text-[#E5F2FF] hover:bg-[#1E334D] rounded-md transition-colors flex items-center gap-2"
+                        className="w-full text-left px-2.5 py-1.5 text-xs text-[#171717] hover:bg-[#E5E5E5] rounded-md transition-colors flex items-center gap-2"
                       >
-                        <MapPin className="h-3.5 w-3.5 text-[#F59E0B] shrink-0" />
+                        <MapPin className="h-3.5 w-3.5 text-[#B45309] shrink-0" />
                         <span className="truncate">{place.address}</span>
                       </button>
                     ))}
@@ -810,9 +896,9 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
                       <button
                         type="button"
                         onClick={() => handleResolveManualAddress(stop.stopOrder, stop.address)}
-                        className="w-full text-left px-2.5 py-1.5 mt-1 border-t border-[#1E334D]/80 text-xs text-[#00C2FF] hover:bg-[#1E334D] rounded-md transition-colors flex items-center gap-2"
+                        className="w-full text-left px-2.5 py-1.5 mt-1 border-t border-[#E5E5E5]/80 text-xs text-[#E21D2B] hover:bg-[#E5E5E5] rounded-md transition-colors flex items-center gap-2"
                       >
-                        <MapPin className="h-3.5 w-3.5 text-[#00C2FF] shrink-0" />
+                        <MapPin className="h-3.5 w-3.5 text-[#E21D2B] shrink-0" />
                         <span className="truncate">Use &ldquo;{stop.address.trim()}&rdquo;</span>
                       </button>
                     )}
@@ -827,7 +913,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
                 <button
                   type="button"
                   onClick={handleAddStop}
-                  className="flex items-center gap-1.5 text-xs font-semibold text-[#00C2FF] hover:text-[#00C2FF]/80 transition-colors"
+                  className="flex items-center gap-1.5 text-xs font-semibold text-[#E21D2B] hover:text-[#E21D2B]/80 transition-colors"
                 >
                   <Plus className="h-3.5 w-3.5" />
                   <span>+ Add Stop (Max 3)</span>
@@ -837,8 +923,8 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
 
             {/* Destination Location */}
             <div className="relative">
-              <label className="block text-xs font-semibold text-[#E5F2FF] mb-1 flex items-center gap-1.5">
-                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#00C2FF] text-[10px] font-bold text-[#07111F]">
+              <label className="block text-xs font-semibold text-[#171717] mb-1 flex items-center gap-1.5">
+                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#E21D2B] text-[10px] font-bold text-[#FFFFFF]">
                   D
                 </span>
                 Destination Location
@@ -860,15 +946,15 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
                       setActiveSuggestionField(null);
                     }
                   }}
-                  className="w-full rounded-lg border border-[#1E334D] bg-[#07111F] px-3.5 py-2.5 text-xs text-[#E5F2FF] placeholder-[#8FA6BF]/50 focus:border-[#00C2FF] focus:outline-none"
+                  className="w-full rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] px-3.5 py-2.5 text-xs text-[#171717] placeholder-[#737373]/50 focus:border-[#E21D2B] focus:outline-none"
                 />
               </div>
 
               {activeSuggestionField === 'dest' && (
-                <div className="absolute left-0 right-0 top-full mt-1 z-30 rounded-lg border border-[#1E334D] bg-[#0F1C2E] p-2 shadow-2xl max-h-52 overflow-y-auto">
+                <div className="absolute left-0 right-0 top-full mt-1 z-30 rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] p-2 shadow-2xl max-h-52 overflow-y-auto">
                   {googlePredictions.length > 0 && (
-                    <div className="mb-2 pb-2 border-b border-[#1E334D]">
-                      <span className="block px-2 py-1 text-[10px] font-semibold text-[#00C2FF] uppercase tracking-wider flex items-center gap-1">
+                    <div className="mb-2 pb-2 border-b border-[#E5E5E5]">
+                      <span className="block px-2 py-1 text-[10px] font-semibold text-[#E21D2B] uppercase tracking-wider flex items-center gap-1">
                         <Sparkles className="h-3 w-3" /> Live Places Autocomplete
                       </span>
                       {googlePredictions.map((pred, pIdx) => {
@@ -878,16 +964,16 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
                             key={`dest-pred-${pIdx}`}
                             type="button"
                             onClick={() => handleSelectGooglePrediction('dest', pred)}
-                            className="w-full text-left px-2.5 py-1.5 text-xs text-[#E5F2FF] hover:bg-[#1E334D] rounded-md transition-colors flex items-center gap-2"
+                            className="w-full text-left px-2.5 py-1.5 text-xs text-[#171717] hover:bg-[#E5E5E5] rounded-md transition-colors flex items-center gap-2"
                           >
-                            <MapPin className="h-3.5 w-3.5 text-[#00C2FF] shrink-0" />
+                            <MapPin className="h-3.5 w-3.5 text-[#E21D2B] shrink-0" />
                             <span className="truncate">{sugText}</span>
                           </button>
                         );
                       })}
                     </div>
                   )}
-                  <span className="block px-2 py-1 text-[10px] font-semibold text-[#8FA6BF] uppercase tracking-wider">
+                  <span className="block px-2 py-1 text-[10px] font-semibold text-[#737373] uppercase tracking-wider">
                     Recommended Destinations
                   </span>
                   {SUGGESTED_PLACES.filter(
@@ -897,9 +983,9 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
                       key={idx}
                       type="button"
                       onClick={() => handleSelectSuggestion('dest', place)}
-                      className="w-full text-left px-2.5 py-1.5 text-xs text-[#E5F2FF] hover:bg-[#1E334D] rounded-md transition-colors flex items-center gap-2"
+                      className="w-full text-left px-2.5 py-1.5 text-xs text-[#171717] hover:bg-[#E5E5E5] rounded-md transition-colors flex items-center gap-2"
                     >
-                      <MapPin className="h-3.5 w-3.5 text-[#00C2FF] shrink-0" />
+                      <MapPin className="h-3.5 w-3.5 text-[#E21D2B] shrink-0" />
                       <span className="truncate">{place.address}</span>
                     </button>
                   ))}
@@ -907,9 +993,9 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
                     <button
                       type="button"
                       onClick={() => handleResolveManualAddress('dest', destInput)}
-                      className="w-full text-left px-2.5 py-1.5 mt-1 border-t border-[#1E334D]/80 text-xs text-[#00C2FF] hover:bg-[#1E334D] rounded-md transition-colors flex items-center gap-2"
+                      className="w-full text-left px-2.5 py-1.5 mt-1 border-t border-[#E5E5E5]/80 text-xs text-[#E21D2B] hover:bg-[#E5E5E5] rounded-md transition-colors flex items-center gap-2"
                     >
-                      <MapPin className="h-3.5 w-3.5 text-[#00C2FF] shrink-0" />
+                      <MapPin className="h-3.5 w-3.5 text-[#E21D2B] shrink-0" />
                       <span className="truncate">Use &ldquo;{destInput.trim()}&rdquo;</span>
                     </button>
                   )}
@@ -921,30 +1007,30 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
           {/* Route Metrics Status Pill */}
           {(distanceKm !== null && durationMinutes !== null) || isRouteLoading ? (
             <div className="pt-2">
-              <div className="flex items-center justify-between p-2.5 rounded-lg border border-[#1E334D] bg-[#07111F] text-xs">
+              <div className="flex items-center justify-between p-2.5 rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] text-xs">
                 <div className="flex items-center gap-2">
-                  <Navigation className="h-4 w-4 text-[#00C2FF]" />
+                  <Navigation className="h-4 w-4 text-[#E21D2B]" />
                   {distanceKm !== null && durationMinutes !== null ? (
-                    <span className="text-[#E5F2FF] font-semibold">
+                    <span className="text-[#171717] font-semibold">
                       {distanceKm} km · {durationMinutes} min
                     </span>
                   ) : (
-                    <span className="text-[#8FA6BF]">Calculating distance...</span>
+                    <span className="text-[#737373]">Calculating distance...</span>
                   )}
                 </div>
 
                 {isRouteLoading ? (
-                  <span className="flex items-center gap-1.5 text-[11px] text-[#00C2FF] font-medium">
+                  <span className="flex items-center gap-1.5 text-[11px] text-[#E21D2B] font-medium">
                     <Loader2 className="h-3 w-3 animate-spin" />
                     Calculating...
                   </span>
                 ) : isRealRoute ? (
-                  <span className="flex items-center gap-1 text-[11px] text-[#22C55E] font-medium">
+                  <span className="flex items-center gap-1 text-[11px] text-[#15803D] font-medium">
                     <ShieldCheck className="h-3.5 w-3.5" />
                     Real Google Route
                   </span>
                 ) : (
-                  <span className="flex items-center gap-1 text-[11px] text-[#F59E0B] font-medium">
+                  <span className="flex items-center gap-1 text-[11px] text-[#B45309] font-medium">
                     <Info className="h-3.5 w-3.5" />
                     Coordinate Estimate
                   </span>
@@ -952,8 +1038,8 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
               </div>
 
               {routeError && !isRouteLoading && (
-                <div className="mt-1.5 rounded-lg border border-[#EF4444]/30 bg-[#EF4444]/10 p-2 text-[11px] text-[#FCA5A5] flex items-start gap-1.5">
-                  <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-[#EF4444]" />
+                <div className="mt-1.5 rounded-lg border border-[#B91C1C]/30 bg-[#B91C1C]/10 p-2 text-[11px] text-[#FCA5A5] flex items-start gap-1.5">
+                  <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-[#B91C1C]" />
                   <span>{routeError}</span>
                 </div>
               )}
@@ -977,7 +1063,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
             }
             if (duplicateWarnings.length === 0) return null;
             return (
-              <div className="rounded-lg border border-[#F59E0B]/40 bg-[#F59E0B]/10 p-2.5 text-xs text-[#F59E0B] space-y-1">
+              <div className="rounded-lg border border-[#B45309]/40 bg-[#B45309]/10 p-2.5 text-xs text-[#B45309] space-y-1">
                 <div className="font-semibold flex items-center gap-1.5">
                   <AlertCircle className="h-4 w-4 shrink-0" />
                   <span>Duplicate Consecutive Waypoint Warning</span>
@@ -990,8 +1076,8 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
           })()}
 
           {/* Ride Type Selection (Economy, Comfort, Premium) */}
-          <div className="pt-4 border-t border-[#1E334D] space-y-3">
-            <span className="text-xs font-bold text-[#E5F2FF] block">
+          <div className="pt-4 border-t border-[#E5E5E5] space-y-3">
+            <span className="text-xs font-bold text-[#171717] block">
               2. Select Vehicle Category
             </span>
 
@@ -1010,34 +1096,34 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
                     onClick={() => setSelectedRideType(type)}
                     className={`cursor-pointer rounded-lg border p-3 flex items-center justify-between transition-all ${
                       isSelected
-                        ? 'border-[#00C2FF] bg-[#00C2FF]/10 shadow-sm'
-                        : 'border-[#1E334D] bg-[#07111F] hover:border-[#1E334D]/80'
+                        ? 'border-[#E21D2B] bg-[#E21D2B]/10 shadow-sm'
+                        : 'border-[#E5E5E5] bg-[#FFFFFF] hover:border-[#E5E5E5]/80'
                     }`}
                   >
                     <div className="flex items-center gap-3">
                       <div
                         className={`p-2 rounded-lg ${
-                          isSelected ? 'bg-[#00C2FF] text-[#07111F]' : 'bg-[#1E334D] text-[#E5F2FF]'
+                          isSelected ? 'bg-[#E21D2B] text-[#FFFFFF]' : 'bg-[#E5E5E5] text-[#171717]'
                         }`}
                       >
                         <Car className="h-4 w-4" />
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-[#E5F2FF]">{config.name}</span>
-                          <span className="text-[10px] text-[#8FA6BF]">Base ₹{config.baseFare}</span>
+                          <span className="text-xs font-bold text-[#171717]">{config.name}</span>
+                          <span className="text-[10px] text-[#737373]">Base ₹{config.baseFare}</span>
                         </div>
-                        <span className="text-[11px] text-[#8FA6BF] block">{config.description}</span>
+                        <span className="text-[11px] text-[#737373] block">{config.description}</span>
                       </div>
                     </div>
 
                     <div className="text-right">
                       {calculatedEstimate !== null ? (
-                        <span className="text-sm font-bold text-[#00C2FF]">
+                        <span className="text-sm font-bold text-[#E21D2B]">
                           ₹{calculatedEstimate}
                         </span>
                       ) : (
-                        <span className="text-xs text-[#8FA6BF]">Select route</span>
+                        <span className="text-xs text-[#737373]">Select route</span>
                       )}
                     </div>
                   </div>
@@ -1046,31 +1132,208 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
             </div>
           </div>
 
+          {/* Ride Timing / Scheduling Option */}
+          <div className="pt-3 border-t border-[#E5E5E5] space-y-2.5 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-[#171717] flex items-center gap-1.5">
+                <Clock className="h-3.5 w-3.5 text-[#E21D2B]" />
+                Ride Timing
+              </span>
+              <div className="inline-flex rounded-lg border border-[#E5E5E5] p-0.5 bg-[#FAFAFA]">
+                <button
+                  type="button"
+                  onClick={() => setIsScheduled(false)}
+                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                    !isScheduled
+                      ? 'bg-[#E21D2B] text-white shadow-xs'
+                      : 'text-[#737373] hover:text-[#171717]'
+                  }`}
+                >
+                  Ride Now
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsScheduled(true)}
+                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                    isScheduled
+                      ? 'bg-[#E21D2B] text-white shadow-xs'
+                      : 'text-[#737373] hover:text-[#171717]'
+                  }`}
+                >
+                  Schedule Ride
+                </button>
+              </div>
+            </div>
+
+            {isScheduled && (
+              <div className="rounded-lg border border-[#E5E5E5] bg-[#FFF1F2]/60 p-3 space-y-2 text-xs">
+                <span className="font-semibold text-[#171717] block flex items-center gap-1">
+                  <Calendar className="h-3.5 w-3.5 text-[#E21D2B]" />
+                  Select Pick-up Date & Time
+                </span>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] text-[#737373] block mb-1">Date</label>
+                    <input
+                      type="date"
+                      value={scheduledDate}
+                      onChange={(e) => setScheduledDate(e.target.value)}
+                      className="w-full rounded-md border border-[#E5E5E5] bg-white px-2.5 py-1.5 text-xs text-[#171717] focus:border-[#E21D2B] focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-[#737373] block mb-1">Time</label>
+                    <input
+                      type="time"
+                      value={scheduledTime}
+                      onChange={(e) => setScheduledTime(e.target.value)}
+                      className="w-full rounded-md border border-[#E5E5E5] bg-white px-2.5 py-1.5 text-xs text-[#171717] focus:border-[#E21D2B] focus:outline-none"
+                    />
+                  </div>
+                </div>
+                <p className="text-[11px] text-[#737373]">
+                  Your cab will be dispatched in advance for pick-up on {scheduledDate} at {scheduledTime}.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Promo Code & Discounts */}
+          <div className="pt-3 border-t border-[#E5E5E5] space-y-2 text-xs">
+            <span className="text-xs font-bold text-[#171717] flex items-center gap-1.5">
+              <Tag className="h-3.5 w-3.5 text-[#E21D2B]" />
+              Promo Code / Offers
+            </span>
+
+            {appliedPromo ? (
+              <div className="flex items-center justify-between p-2.5 rounded-lg bg-[#15803D]/10 border border-[#15803D]/30 text-xs">
+                <div className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-[#15803D]" />
+                  <div>
+                    <span className="font-bold text-[#15803D] uppercase">{appliedPromo} Applied</span>
+                    <span className="text-[11px] text-[#15803D] block">You saved ₹{promoDiscount}!</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRemovePromo}
+                  className="p-1 rounded hover:bg-black/5 text-[#737373] hover:text-[#B91C1C]"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Coupon (e.g. WELCOME50)"
+                    value={promoCodeInput}
+                    onChange={(e) => setPromoCodeInput(e.target.value.toUpperCase())}
+                    className="w-full rounded-lg border border-[#E5E5E5] bg-white px-3 py-2 text-xs uppercase placeholder:normal-case font-mono focus:border-[#E21D2B] focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleApplyPromo()}
+                    disabled={isValidatingPromo || !promoCodeInput.trim()}
+                    className="px-3.5 py-2 rounded-lg bg-[#171717] hover:bg-black text-white text-xs font-bold transition-all disabled:opacity-40"
+                  >
+                    {isValidatingPromo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Apply'}
+                  </button>
+                </div>
+
+                {/* Quick available codes */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10px] text-[#737373]">Try:</span>
+                  {availablePromos.length > 0 ? (
+                    availablePromos.slice(0, 3).map((p) => (
+                      <button
+                        key={p.code}
+                        type="button"
+                        onClick={() => {
+                          setPromoCodeInput(p.code);
+                          handleApplyPromo(p.code);
+                        }}
+                        className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#FFF1F2] text-[#E21D2B] border border-[#E21D2B]/30 hover:bg-[#E21D2B] hover:text-white transition-all"
+                      >
+                        {p.code} ({p.discount_type === 'percentage' ? `${p.discount_value}%` : `₹${p.discount_value}`} OFF)
+                      </button>
+                    ))
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPromoCodeInput('WELCOME50');
+                          handleApplyPromo('WELCOME50');
+                        }}
+                        className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#FFF1F2] text-[#E21D2B] border border-[#E21D2B]/30 hover:bg-[#E21D2B] hover:text-white transition-all"
+                      >
+                        WELCOME50 (₹50 OFF)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPromoCodeInput('RIDE20');
+                          handleApplyPromo('RIDE20');
+                        }}
+                        className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#FFF1F2] text-[#E21D2B] border border-[#E21D2B]/30 hover:bg-[#E21D2B] hover:text-white transition-all"
+                      >
+                        RIDE20 (20% OFF)
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                {promoMessage && (
+                  <p
+                    className={`text-[11px] font-medium flex items-center gap-1 ${
+                      promoMessage.type === 'success' ? 'text-[#15803D]' : 'text-[#B91C1C]'
+                    }`}
+                  >
+                    {promoMessage.type === 'success' ? (
+                      <Check className="h-3 w-3" />
+                    ) : (
+                      <AlertCircle className="h-3 w-3" />
+                    )}
+                    <span>{promoMessage.text}</span>
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Fare Breakdown Details */}
           {activeFare && (
-            <div className="pt-3 border-t border-[#1E334D] space-y-2 text-xs">
-              <span className="text-xs font-bold text-[#E5F2FF] block mb-1">
+            <div className="pt-3 border-t border-[#E5E5E5] space-y-2 text-xs">
+              <span className="text-xs font-bold text-[#171717] block mb-1">
                 3. Estimated Fare Breakdown
               </span>
 
-              <div className="flex justify-between text-[#8FA6BF]">
+              <div className="flex justify-between text-[#737373]">
                 <span>Base Fare:</span>
-                <span className="font-mono text-[#E5F2FF]">₹{activeFare.baseFare}</span>
+                <span className="font-mono text-[#171717]">₹{activeFare.baseFare}</span>
               </div>
-              <div className="flex justify-between text-[#8FA6BF]">
+              <div className="flex justify-between text-[#737373]">
                 <span>Distance Charge ({activeFare.distanceKm} km):</span>
-                <span className="font-mono text-[#E5F2FF]">₹{activeFare.distanceCharge}</span>
+                <span className="font-mono text-[#171717]">₹{activeFare.distanceCharge}</span>
               </div>
-              <div className="flex justify-between text-[#8FA6BF]">
+              <div className="flex justify-between text-[#737373]">
                 <span>Time Charge ({activeFare.durationMinutes} min):</span>
-                <span className="font-mono text-[#E5F2FF]">₹{activeFare.timeCharge}</span>
+                <span className="font-mono text-[#171717]">₹{activeFare.timeCharge}</span>
               </div>
-              <div className="flex justify-between text-sm font-bold text-[#00C2FF] pt-2 border-t border-[#1E334D]">
+              {appliedPromo && promoDiscount > 0 && (
+                <div className="flex justify-between text-[#15803D] font-semibold">
+                  <span>Promo Discount ({appliedPromo}):</span>
+                  <span className="font-mono">-₹{promoDiscount}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-sm font-bold text-[#E21D2B] pt-2 border-t border-[#E5E5E5]">
                 <span>Total Estimated Fare:</span>
-                <span>₹{activeFare.estimatedFare}</span>
+                <span>₹{Math.max(30, activeFare.estimatedFare - promoDiscount)}</span>
               </div>
 
-              <p className="text-[11px] text-[#8FA6BF] pt-1 leading-normal italic">
+              <p className="text-[11px] text-[#737373] pt-1 leading-normal italic">
                 * Estimated fare. Final fare calculated authoritatively by backend using verified route metrics.
               </p>
             </div>
@@ -1082,16 +1345,19 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
               type="button"
               onClick={handleConfirmRide}
               disabled={!pickup || !destination || isSubmitting}
-              className="w-full flex items-center justify-center gap-2 rounded-lg bg-[#00C2FF] py-3 px-4 text-xs font-bold text-[#07111F] shadow-lg shadow-[#00C2FF]/20 hover:bg-[#00C2FF]/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              className="w-full flex items-center justify-center gap-2 rounded-lg bg-[#E21D2B] py-3 px-4 text-xs font-bold text-[#FFFFFF] shadow-lg shadow-[#E21D2B]/20 hover:bg-[#E21D2B]/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {isSubmitting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Booking your ride...</span>
+                  <span>{isScheduled ? 'Scheduling your ride...' : 'Booking your ride...'}</span>
                 </>
               ) : (
                 <>
-                  <span>Confirm Ride — {activeFare ? `₹${activeFare.estimatedFare}` : 'Select Route'}</span>
+                  <span>
+                    {isScheduled ? 'Schedule Ride' : 'Confirm Ride'} —{' '}
+                    {activeFare ? `₹${Math.max(30, activeFare.estimatedFare - promoDiscount)}` : 'Select Route'}
+                  </span>
                   <ArrowRight className="h-4 w-4" />
                 </>
               )}

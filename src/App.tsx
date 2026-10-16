@@ -37,6 +37,7 @@ import { ProfilePage } from './components/profile/ProfilePage.tsx';
 import { AccessDeniedPage } from './components/auth/AccessDeniedPage.tsx';
 import { AuthTestingPanel } from './components/auth/AuthTestingPanel.tsx';
 import { BookingPage } from './components/booking/BookingPage.tsx';
+import { LandingPage } from './components/LandingPage.tsx';
 import { useHealth } from './hooks/useHealth.ts';
 import { useAuthSession } from './context/AuthContext.tsx';
 
@@ -148,7 +149,7 @@ export default function App() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#07111F] text-[#E5F2FF] flex flex-col selection:bg-[#00C2FF]/30 selection:text-[#E5F2FF]">
+    <div className="min-h-screen bg-[#FFFFFF] text-[#171717] flex flex-col selection:bg-[#E21D2B]/30 selection:text-[#171717]">
       {/* Navigation Top Bar */}
       <Navbar
         currentRoute={currentRoute}
@@ -178,172 +179,7 @@ export default function App() {
           <AccessDeniedPage attemptedRole={attemptedRole} onNavigate={handleNavigate} />
         )}
 
-        {/* Home / Overview View */}
-        {currentRoute === 'home' && (
-          <>
-            {/* Hero Section */}
-            <section id="hero" className="relative overflow-hidden border-b border-[#1E334D] py-16 sm:py-24">
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[350px] bg-gradient-to-b from-[#00C2FF]/10 via-[#0EA5E9]/5 to-transparent blur-3xl pointer-events-none -z-10" />
-
-              <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                <div className="max-w-3xl">
-                  <div className="inline-flex items-center gap-2 text-xs font-semibold text-[#00C2FF] mb-4 tracking-wide uppercase">
-                    <span className="h-1.5 w-1.5 rounded-full bg-[#00C2FF] animate-pulse"></span>
-                    Step 4 Active · Driver Dashboard + Realtime Requests + Secure Assignment
-                  </div>
-
-                  <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-[#E5F2FF] leading-[1.15]">
-                    RideNova
-                  </h1>
-
-                  <p className="mt-3 text-xl sm:text-2xl font-medium text-[#0EA5E9]">
-                    Your ride. Your route. Your time.
-                  </p>
-
-                  <p className="mt-4 text-base sm:text-lg text-[#8FA6BF] leading-relaxed">
-                    Full-stack cab and ride-booking platform. Step 4 connects rider bookings with driver dispatch: live availability toggling, incoming request queue with earnings calculations, atomic race-condition safe driver assignment, and trip lifecycle execution.
-                  </p>
-
-                  {/* Action Buttons */}
-                  <div className="mt-8 flex flex-wrap items-center gap-4">
-                    <button
-                      onClick={() => handleNavigate('book-ride')}
-                      className="flex items-center gap-2.5 rounded-lg bg-[#00C2FF] px-5 py-3 text-sm font-semibold text-[#07111F] shadow-lg shadow-[#00C2FF]/20 hover:bg-[#00C2FF]/90 transition-all active:scale-95"
-                    >
-                      <Navigation className="h-4 w-4" />
-                      <span>Book a Ride (Rider)</span>
-                    </button>
-
-                    <button
-                      onClick={() => handleNavigate('driver')}
-                      className="flex items-center gap-2 rounded-lg border border-[#0EA5E9]/50 bg-[#0EA5E9]/10 px-5 py-3 text-sm font-semibold text-[#00C2FF] hover:bg-[#0EA5E9]/20 transition-all"
-                    >
-                      <Car className="h-4 w-4" />
-                      <span>Driver Dashboard (Step 4)</span>
-                    </button>
-
-                    <button
-                      onClick={() => scrollToSection('auth-testing')}
-                      className="flex items-center gap-2 text-sm font-medium text-[#8FA6BF] hover:text-[#E5F2FF] px-2 py-3 transition-colors"
-                    >
-                      <Lock className="h-4 w-4" />
-                      <span>Security & Role Tests</span>
-                      <ArrowRight className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-
-                  {/* Highlights */}
-                  <div className="mt-10 pt-6 border-t border-[#1E334D]/80 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-[#8FA6BF]">
-                    <div className="flex items-center gap-1.5">
-                      <CheckCircle className="h-3.5 w-3.5 text-[#22C55E]" />
-                      <span>Multi-Stop Waypoints (Max 3)</span>
-                    </div>
-                    <span>·</span>
-                    <div className="flex items-center gap-1.5">
-                      <CheckCircle className="h-3.5 w-3.5 text-[#22C55E]" />
-                      <span>Dynamic Tiered Fare Engine</span>
-                    </div>
-                    <span>·</span>
-                    <div className="flex items-center gap-1.5">
-                      <CheckCircle className="h-3.5 w-3.5 text-[#22C55E]" />
-                      <span>Status: requested (No Fake Driver)</span>
-                    </div>
-                    <span>·</span>
-                    <div className="flex items-center gap-1.5">
-                      <CheckCircle className="h-3.5 w-3.5 text-[#22C55E]" />
-                      <span>Duplicate Click Protection</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            {/* Step 2 & 3 Interactive Role & Route Testing Suite */}
-            <section id="auth-testing" className="py-12 sm:py-16">
-              <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                <AuthTestingPanel />
-              </div>
-            </section>
-
-            {/* Section 1: System Health Diagnostics */}
-            <section id="system-health" className="py-12 sm:py-16 bg-[#07111F]">
-              <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                <HealthWidget health={health} />
-              </div>
-            </section>
-
-            {/* Section 2: Architecture & Tier Boundaries */}
-            <section id="architecture" className="py-12 sm:py-16">
-              <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                <ArchitectureOverview />
-              </div>
-            </section>
-
-            {/* Section 3: Database Schema Foundation */}
-            <section id="database" className="py-12 sm:py-16 bg-[#07111F]">
-              <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                <div className="rounded-xl border border-[#1E334D] bg-[#0F1C2E] p-6 shadow-sm">
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b border-[#1E334D]">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <Database className="h-5 w-5 text-[#00C2FF]" />
-                        <h2 className="text-xl font-bold tracking-tight text-[#E5F2FF]">
-                          Database Foundation (11 Core Tables)
-                        </h2>
-                      </div>
-                      <p className="mt-1 text-xs text-[#8FA6BF]">
-                        PostgreSQL tables with UUID primary keys, clerk_user_id unique indexing, and rides table storing live requests.
-                      </p>
-                    </div>
-
-                    <button
-                      onClick={() => setIsSchemaModalOpen(true)}
-                      className="flex items-center gap-2 rounded-lg bg-[#00C2FF] px-4 py-2 text-xs font-semibold text-[#07111F] hover:bg-[#00C2FF]/90 transition-colors"
-                    >
-                      <FileCode className="h-3.5 w-3.5" />
-                      <span>View SQL Migration Details</span>
-                    </button>
-                  </div>
-
-                  <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {coreTablesSummary.map((tbl, i) => (
-                      <div
-                        key={tbl.name}
-                        onClick={() => setIsSchemaModalOpen(true)}
-                        className="group cursor-pointer rounded-lg border border-[#1E334D] bg-[#07111F] p-4 transition-all hover:border-[#00C2FF]/50 hover:bg-[#07111F]/80"
-                      >
-                        <div className="flex items-center justify-between pb-2 border-b border-[#1E334D]/60">
-                          <span className="font-mono text-xs font-bold text-[#00C2FF] group-hover:text-[#E5F2FF]">
-                            {tbl.name}
-                          </span>
-                          <span className="text-[10px] font-mono text-[#8FA6BF]">
-                            #{String(i + 1).padStart(2, '0')}
-                          </span>
-                        </div>
-
-                        <p className="mt-2 text-xs text-[#8FA6BF] leading-relaxed min-h-[36px]">
-                          {tbl.role}
-                        </p>
-
-                        <div className="mt-3 pt-2 border-t border-[#1E334D]/40 flex items-center justify-between text-[11px]">
-                          <span className="text-[#8FA6BF] font-mono">{tbl.count}</span>
-                          <span className="text-[#0EA5E9] font-mono">{tbl.pKey} PK</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            {/* Section 4: Project Roadmap */}
-            <section id="roadmap" className="py-12 sm:py-16">
-              <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                <RoadmapCard />
-              </div>
-            </section>
-          </>
-        )}
+        {currentRoute === 'home' && <LandingPage onNavigate={handleNavigate} />}
       </main>
 
       {/* Schema Inspector Modal */}

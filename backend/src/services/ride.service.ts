@@ -3,6 +3,7 @@ import { CreateRideInput } from '../validators/ride.validator.ts';
 import { calculateFare } from './fare.service.ts';
 import { routeService, RouteCalculationResult } from './route.service.ts';
 import { logger } from '../utils/logger.ts';
+import { extendedRepository } from '../repositories/extended.repository.ts';
 
 export const rideService = {
   /**
@@ -110,5 +111,158 @@ export const rideService = {
    */
   async getRidesByRiderId(riderId: string): Promise<RideWithStops[]> {
     return rideRepository.findByRiderId(riderId);
+  },
+
+  /**
+   * Cancel ride
+   */
+  async cancelRide(rideId: string, userId: string, reason?: string): Promise<RideWithStops | null> {
+    const cancelled = await rideRepository.cancelRide(rideId, userId, reason);
+    if (cancelled) {
+      await extendedRepository.createNotification(
+        cancelled.rider_id,
+        'RIDE_CANCELLED',
+        'Ride Cancelled',
+        `Your ride (${cancelled.reference_id || cancelled.id.slice(0, 8)}) was cancelled.`
+      );
+    }
+    return cancelled;
+  },
+
+  /**
+   * Process payment for completed ride
+   */
+  async processPayment(
+    rideId: string,
+    riderId: string,
+    paymentMethod: string,
+    stripeToken?: string,
+    promoCode?: string
+  ): Promise<{ payment: any; earnings?: any; receipt: any }> {
+    const ride = await rideRepository.findById(rideId);
+    if (!ride) {
+      throw new Error('Ride not found');
+    }
+
+    if (ride.rider_id !== riderId) {
+      throw new Error('Unauthorized to pay for this ride');
+    }
+
+    let finalAmount = Number(ride.estimated_fare);
+
+    if (promoCode) {
+      const promoResult = await extendedRepository.validatePromoCode(promoCode, finalAmount);
+      if (promoResult.valid) {
+        finalAmount = promoResult.finalFare;
+      }
+    }
+
+    const stripePaymentIntentId = stripeToken?.startsWith('pi_')
+      ? stripeToken
+      : `pi_test_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+
+    const payment = await extendedRepository.recordPayment({
+      ride_id: rideId,
+      rider_id: riderId,
+      amount: finalAmount,
+      currency: 'INR',
+      payment_method: paymentMethod,
+      stripe_payment_intent_id: stripePaymentIntentId,
+      status: 'succeeded',
+    });
+
+    let earnings = null;
+    if (ride.driver_id) {
+      earnings = await extendedRepository.recordDriverEarnings({
+        driver_id: ride.driver_id,
+        ride_id: rideId,
+        gross_amount: finalAmount,
+      });
+    }
+
+    await extendedRepository.createNotification(
+      riderId,
+      'PAYMENT_SUCCESS',
+      'Payment Received',
+      `Payment of ₹${finalAmount.toFixed(2)} for ride ${ride.reference_id || ride.id.slice(0, 8)} was successful.`
+    );
+
+    const receipt = {
+      receiptNumber: `RN-REC-${Date.now().toString().slice(-8)}`,
+      rideId: ride.id,
+      referenceId: ride.reference_id || ride.id.slice(0, 8),
+      date: new Date().toISOString(),
+      amount: finalAmount,
+      currency: 'INR',
+      paymentMethod,
+      stripePaymentIntentId,
+      status: 'PAID',
+      pickup: ride.pickup_address,
+      destination: ride.destination_address,
+      distanceKm: ride.distance_km,
+      durationMinutes: ride.estimated_duration_minutes,
+      fareBreakdown: {
+        baseFare: Math.max(30, Number((finalAmount * 0.4).toFixed(2))),
+        distanceFare: Number((finalAmount * 0.45).toFixed(2)),
+        timeFare: Number((finalAmount * 0.15).toFixed(2)),
+        discount: Number(ride.estimated_fare) - finalAmount,
+        total: finalAmount,
+      },
+    };
+
+    return { payment, earnings, receipt };
+  },
+
+  /**
+   * Submit post-ride driver review
+   */
+  async submitReview(rideId: string, riderId: string, rating: number, comment?: string) {
+    const ride = await rideRepository.findById(rideId);
+    if (!ride) {
+      throw new Error('Ride record not found');
+    }
+    if (ride.rider_id !== riderId) {
+      throw new Error('You can only review rides that you booked');
+    }
+    if (!ride.driver_id) {
+      throw new Error('Cannot review a ride that did not have an assigned driver');
+    }
+
+    const review = await extendedRepository.createReview({
+      ride_id: rideId,
+      rider_id: riderId,
+      driver_id: ride.driver_id,
+      rating,
+      comment,
+    });
+
+    return review;
+  },
+
+  /**
+   * Get receipt for ride
+   */
+  async getReceipt(rideId: string, riderId: string) {
+    const ride = await rideRepository.findById(rideId);
+    if (!ride) {
+      throw new Error('Ride not found');
+    }
+
+    const amount = ride.final_fare ? Number(ride.final_fare) : Number(ride.estimated_fare);
+
+    return {
+      receiptNumber: `RN-REC-${ride.id.slice(0, 8).toUpperCase()}`,
+      rideId: ride.id,
+      referenceId: ride.reference_id || ride.id.slice(0, 8),
+      date: ride.completed_at || ride.updated_at || new Date().toISOString(),
+      amount,
+      currency: 'INR',
+      status: ride.status === 'ride_completed' ? 'PAID' : 'PENDING',
+      pickup: ride.pickup_address,
+      destination: ride.destination_address,
+      distanceKm: ride.distance_km,
+      durationMinutes: ride.estimated_duration_minutes,
+      rideType: ride.ride_type,
+    };
   },
 };

@@ -87,6 +87,7 @@ export interface CreateRidePayload {
   destinationLongitude: number;
   rideType: VehicleType;
   stops?: RideStopInput[];
+  scheduledAt?: string;
 }
 
 export interface RideStop {
@@ -100,6 +101,25 @@ export interface RideStop {
 }
 
 export type RouteSource = 'google_routes_api' | 'fallback_estimate';
+
+export interface DriverDisplayInfo {
+  id: string;
+  name: string;
+  phone: string | null;
+  rating: number;
+  total_rides: number;
+  profile_image_url?: string | null;
+  current_latitude?: number | null;
+  current_longitude?: number | null;
+  vehicle: {
+    make: string;
+    model: string;
+    color: string;
+    registration_number: string;
+    year: number;
+    vehicle_type: VehicleType;
+  } | null;
+}
 
 export interface RideWithStops {
   id: string;
@@ -123,6 +143,8 @@ export interface RideWithStops {
   updated_at: string;
   stops: RideStop[];
   reference_id?: string;
+  driver?: DriverDisplayInfo | null;
+  scheduled_at?: string | null;
 }
 
 export interface RideApiResponse {
@@ -190,6 +212,129 @@ export interface AvailableRideSummary {
     latitude: number;
     longitude: number;
   }[];
+}
+
+export interface Payment {
+  id: string;
+  ride_id: string;
+  rider_id: string;
+  amount: number;
+  currency: string;
+  payment_method: string;
+  stripe_payment_intent_id?: string | null;
+  status: PaymentStatus;
+  paid_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Review {
+  id: string;
+  ride_id: string;
+  rider_id: string;
+  driver_id: string;
+  rating: number;
+  comment?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PromoCode {
+  id: string;
+  code: string;
+  discount_type: 'percentage' | 'fixed';
+  discount_value: number;
+  minimum_fare: number;
+  maximum_discount?: number | null;
+  usage_limit?: number | null;
+  used_count: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  type: string;
+  title: string;
+  message: string;
+  is_read: boolean;
+  created_at: string;
+}
+
+export type SupportCategory = 'payment' | 'ride' | 'driver' | 'lost_item' | 'technical' | 'other';
+export type SupportStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
+export type SupportPriority = 'low' | 'medium' | 'high' | 'urgent';
+
+export interface SupportTicket {
+  id: string;
+  user_id: string;
+  category: SupportCategory;
+  subject: string;
+  description: string;
+  status: SupportStatus;
+  priority: SupportPriority;
+  created_at: string;
+  updated_at: string;
+  user_name?: string;
+  user_email?: string;
+}
+
+export interface AdminOverviewData {
+  totalUsers: number;
+  totalRiders: number;
+  totalDrivers: number;
+  activeDrivers: number;
+  totalRides: number;
+  completedRides: number;
+  activeRides: number;
+  totalRevenue: number;
+  platformFeeTotal: number;
+  openTickets: number;
+  recentRides: any[];
+}
+
+export interface AdminDriver {
+  id: string;
+  user_id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  license_number: string;
+  status: DriverStatus;
+  is_online: boolean;
+  rating: number;
+  total_rides: number;
+  make?: string | null;
+  model?: string | null;
+  color?: string | null;
+  registration_number?: string | null;
+  vehicle_type?: VehicleType | null;
+  created_at: string;
+}
+
+export interface ReceiptData {
+  receiptNumber: string;
+  rideId: string;
+  referenceId: string;
+  date: string;
+  amount: number;
+  currency: string;
+  paymentMethod: string;
+  stripePaymentIntentId?: string;
+  status: string;
+  pickup: string;
+  destination: string;
+  distanceKm?: number;
+  durationMinutes?: number;
+  rideType?: string;
+  fareBreakdown?: {
+    baseFare: number;
+    distanceFare: number;
+    timeFare: number;
+    discount: number;
+    total: number;
+  };
 }
 
 

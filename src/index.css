@@ -1,24 +1,25 @@
 @import "tailwindcss";
 
 @theme {
-  --color-brand-bg: #07111F;
-  --color-brand-primary: #00C2FF;
-  --color-brand-secondary: #0EA5E9;
-  --color-brand-card: #0F1C2E;
-  --color-brand-card-hover: #14243B;
-  --color-brand-border: #1E334D;
-  --color-brand-text: #E5F2FF;
-  --color-brand-muted: #8FA6BF;
-  --color-brand-success: #22C55E;
-  --color-brand-warning: #F59E0B;
-  --color-brand-danger: #EF4444;
-  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --color-brand-bg: #FFFFFF;
+  --color-brand-primary: #E21D2B;
+  --color-brand-primary-dark: #BE1622;
+  --color-brand-secondary: #FFF1F2;
+  --color-brand-card: #FFFFFF;
+  --color-brand-card-hover: #FAFAFA;
+  --color-brand-border: #E5E5E5;
+  --color-brand-text: #171717;
+  --color-brand-muted: #737373;
+  --color-brand-success: #15803D;
+  --color-brand-warning: #B45309;
+  --color-brand-danger: #B91C1C;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 }
 
 body {
-  background-color: #07111F;
-  color: #E5F2FF;
+  background-color: #FFFFFF;
+  color: #171717;
   font-family: var(--font-sans);
   min-height: 100vh;
   margin: 0;
@@ -32,12 +33,12 @@ body {
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #07111F;
+  background: #FFFFFF;
 }
 ::-webkit-scrollbar-thumb {
-  background: #1E334D;
+  background: #EEEEEE;
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #0EA5E9;
+  background: #E21D2B;
 }

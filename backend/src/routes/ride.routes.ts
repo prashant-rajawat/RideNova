@@ -21,4 +21,16 @@ router.post('/:id/accept', requireAuth, requireRole('driver'), driverController.
 // GET /api/rides/:id - Get specific ride details (Owner or admin only)
 router.get('/:id', requireAuth, requireRole('rider', 'admin'), rideController.getRideById);
 
+// POST /api/rides/:id/cancel - Cancel ride
+router.post('/:id/cancel', requireAuth, requireRole('rider', 'driver', 'admin'), rideController.cancelRide);
+
+// POST /api/rides/:id/pay - Process payment (Stripe test-mode / Card)
+router.post('/:id/pay', requireAuth, requireRole('rider'), rideController.processPayment);
+
+// POST /api/rides/:id/review - Submit post-ride driver review
+router.post('/:id/review', requireAuth, requireRole('rider'), rideController.submitReview);
+
+// GET /api/rides/:id/receipt - Get ride receipt
+router.get('/:id/receipt', requireAuth, requireRole('rider', 'admin'), rideController.getReceipt);
+
 export default router;

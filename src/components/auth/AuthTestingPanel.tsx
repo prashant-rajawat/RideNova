@@ -263,16 +263,16 @@ export const AuthTestingPanel: React.FC = () => {
   };
 
   return (
-    <div className="rounded-xl border border-[#1E334D] bg-[#0F1C2E] p-6 shadow-sm">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#1E334D]">
+    <div className="rounded-xl border border-[#E5E5E5] bg-[#FFFFFF] p-6 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#E5E5E5]">
         <div>
           <div className="flex items-center gap-2">
-            <ShieldCheck className="h-5 w-5 text-[#22C55E]" />
-            <h2 className="text-xl font-bold tracking-tight text-[#E5F2FF]">
+            <ShieldCheck className="h-5 w-5 text-[#15803D]" />
+            <h2 className="text-xl font-bold tracking-tight text-[#171717]">
               Step 2 Auth & Role Verification Suite
             </h2>
           </div>
-          <p className="mt-1 text-xs text-[#8FA6BF]">
+          <p className="mt-1 text-xs text-[#737373]">
             Automated verification of 401 unauthenticated rejects, 403 forbidden role checks, and database user sync.
           </p>
         </div>
@@ -280,7 +280,7 @@ export const AuthTestingPanel: React.FC = () => {
         <button
           onClick={runAllTests}
           disabled={isRunningAll}
-          className="flex items-center gap-2 rounded-lg bg-[#22C55E] px-4 py-2.5 text-xs font-semibold text-[#07111F] shadow-md shadow-[#22C55E]/20 hover:bg-[#22C55E]/90 transition-all disabled:opacity-50"
+          className="flex items-center gap-2 rounded-lg bg-[#15803D] px-4 py-2.5 text-xs font-semibold text-[#FFFFFF] shadow-md shadow-[#15803D]/20 hover:bg-[#15803D]/90 transition-all disabled:opacity-50"
         >
           <Play className={`h-3.5 w-3.5 ${isRunningAll ? 'animate-spin' : ''}`} />
           <span>{isRunningAll ? 'Running Tests...' : 'Run Automated Role Tests'}</span>
@@ -288,42 +288,42 @@ export const AuthTestingPanel: React.FC = () => {
       </div>
 
       {/* Role Switcher for Development Testing */}
-      <div className="mt-6 rounded-lg border border-[#1E334D] bg-[#07111F] p-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#1E334D]/60 text-xs">
-          <span className="text-[#8FA6BF] flex items-center gap-1.5 font-medium">
-            <UserCheck className="h-4 w-4 text-[#00C2FF]" />
+      <div className="mt-6 rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] p-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#E5E5E5]/60 text-xs">
+          <span className="text-[#737373] flex items-center gap-1.5 font-medium">
+            <UserCheck className="h-4 w-4 text-[#E21D2B]" />
             Current Authenticated State:
           </span>
           {user ? (
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-[#E5F2FF]">{user.name}</span>
-              <span className="text-xs text-[#8FA6BF]">({user.email})</span>
-              <span className="font-mono text-[11px] font-bold uppercase px-2 py-0.5 rounded bg-[#00C2FF]/10 text-[#00C2FF] border border-[#00C2FF]/30">
+              <span className="font-semibold text-[#171717]">{user.name}</span>
+              <span className="text-xs text-[#737373]">({user.email})</span>
+              <span className="font-mono text-[11px] font-bold uppercase px-2 py-0.5 rounded bg-[#E21D2B]/10 text-[#E21D2B] border border-[#E21D2B]/30">
                 {user.role}
               </span>
             </div>
           ) : (
-            <span className="text-[#8FA6BF]">Unauthenticated (Guest)</span>
+            <span className="text-[#737373]">Unauthenticated (Guest)</span>
           )}
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-          <span className="text-[#8FA6BF] text-[11px]">Dev Role Switcher (Controlled Backend Promotion):</span>
+          <span className="text-[#737373] text-[11px]">Dev Role Switcher (Controlled Backend Promotion):</span>
           <button
             onClick={() => handleQuickRoleSwitch('rider')}
-            className="px-3 py-1 rounded bg-[#00C2FF]/10 text-[#00C2FF] border border-[#00C2FF]/30 hover:bg-[#00C2FF]/20 transition-colors font-medium text-[11px]"
+            className="px-3 py-1 rounded bg-[#E21D2B]/10 text-[#E21D2B] border border-[#E21D2B]/30 hover:bg-[#E21D2B]/20 transition-colors font-medium text-[11px]"
           >
             Switch to Rider
           </button>
           <button
             onClick={() => handleQuickRoleSwitch('driver')}
-            className="px-3 py-1 rounded bg-[#0EA5E9]/10 text-[#0EA5E9] border border-[#0EA5E9]/30 hover:bg-[#0EA5E9]/20 transition-colors font-medium text-[11px]"
+            className="px-3 py-1 rounded bg-[#E21D2B]/10 text-[#E21D2B] border border-[#E21D2B]/30 hover:bg-[#E21D2B]/20 transition-colors font-medium text-[11px]"
           >
             Promote to Driver
           </button>
           <button
             onClick={() => handleQuickRoleSwitch('admin')}
-            className="px-3 py-1 rounded bg-[#22C55E]/10 text-[#22C55E] border border-[#22C55E]/30 hover:bg-[#22C55E]/20 transition-colors font-medium text-[11px]"
+            className="px-3 py-1 rounded bg-[#15803D]/10 text-[#15803D] border border-[#15803D]/30 hover:bg-[#15803D]/20 transition-colors font-medium text-[11px]"
           >
             Promote to Admin
           </button>
@@ -333,7 +333,7 @@ export const AuthTestingPanel: React.FC = () => {
       {/* Test Results Output */}
       {testResults.length > 0 && (
         <div className="mt-6 space-y-2">
-          <div className="flex items-center justify-between text-xs font-semibold text-[#8FA6BF] px-1 pb-1">
+          <div className="flex items-center justify-between text-xs font-semibold text-[#737373] px-1 pb-1">
             <span>Automated Test Case</span>
             <span>Result & Status Code</span>
           </div>
@@ -344,20 +344,20 @@ export const AuthTestingPanel: React.FC = () => {
                 key={idx}
                 className={`rounded-lg border p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs transition-colors ${
                   t.passed
-                    ? 'border-[#22C55E]/30 bg-[#22C55E]/5'
-                    : 'border-[#EF4444]/30 bg-[#EF4444]/5'
+                    ? 'border-[#15803D]/30 bg-[#15803D]/5'
+                    : 'border-[#B91C1C]/30 bg-[#B91C1C]/5'
                 }`}
               >
                 <div className="flex items-center gap-2.5">
                   {t.passed ? (
-                    <CheckCircle2 className="h-4 w-4 text-[#22C55E] shrink-0" />
+                    <CheckCircle2 className="h-4 w-4 text-[#15803D] shrink-0" />
                   ) : (
-                    <XCircle className="h-4 w-4 text-[#EF4444] shrink-0" />
+                    <XCircle className="h-4 w-4 text-[#B91C1C] shrink-0" />
                   )}
                   <div>
-                    <span className="font-medium text-[#E5F2FF]">{t.name}</span>
+                    <span className="font-medium text-[#171717]">{t.name}</span>
                     {t.details && (
-                      <span className="block text-[11px] text-[#8FA6BF] mt-0.5">
+                      <span className="block text-[11px] text-[#737373] mt-0.5">
                         {t.details}
                       </span>
                     )}
@@ -365,12 +365,12 @@ export const AuthTestingPanel: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-3 shrink-0 self-end sm:self-auto font-mono text-[11px]">
-                  <span className="text-[#8FA6BF]">Expected: {t.expectedStatus}</span>
+                  <span className="text-[#737373]">Expected: {t.expectedStatus}</span>
                   <span
                     className={`font-bold px-2 py-0.5 rounded ${
                       t.passed
-                        ? 'bg-[#22C55E]/20 text-[#22C55E]'
-                        : 'bg-[#EF4444]/20 text-[#EF4444]'
+                        ? 'bg-[#15803D]/20 text-[#15803D]'
+                        : 'bg-[#B91C1C]/20 text-[#B91C1C]'
                     }`}
                   >
                     Actual: {t.actualStatus}
@@ -380,7 +380,7 @@ export const AuthTestingPanel: React.FC = () => {
             ))}
           </div>
 
-          <div className="pt-3 border-t border-[#1E334D] flex items-center justify-between text-xs text-[#8FA6BF]">
+          <div className="pt-3 border-t border-[#E5E5E5] flex items-center justify-between text-xs text-[#737373]">
             <span>
               Passed: {testResults.filter((r) => r.passed).length} / {testResults.length}
             </span>

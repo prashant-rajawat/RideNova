@@ -2,21 +2,21 @@ import React from 'react';
 
 export const Footer: React.FC = () => {
   return (
-    <footer className="border-t border-[#1E334D] bg-[#07111F] py-12 text-[#8FA6BF]">
+    <footer className="border-t border-[#E5E5E5] bg-[#FFFFFF] py-12 text-[#737373]">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 pb-8 border-b border-[#1E334D]">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 pb-8 border-b border-[#E5E5E5]">
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-lg font-bold text-[#E5F2FF]">RideNova</span>
-              <span className="text-xs text-[#8FA6BF]">·</span>
-              <span className="text-xs text-[#00C2FF] font-medium">Architecture Phase 1</span>
+              <span className="text-lg font-bold text-[#171717]">RideNova</span>
+              <span className="text-xs text-[#737373]">·</span>
+              <span className="text-xs text-[#E21D2B] font-medium">Architecture Phase 1</span>
             </div>
-            <p className="mt-1 text-sm text-[#8FA6BF]">
+            <p className="mt-1 text-sm text-[#737373]">
               Your ride. Your route. Your time.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-6 text-xs text-[#8FA6BF]">
+          <div className="flex flex-wrap items-center gap-6 text-xs text-[#737373]">
             <span>Next.js & Vite</span>
             <span>·</span>
             <span>Express REST API</span>
@@ -29,11 +29,11 @@ export const Footer: React.FC = () => {
           </div>
         </div>
 
-        <div className="mt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#8FA6BF]">
+        <div className="mt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#737373]">
           <p>© {new Date().getFullYear()} RideNova Platform. Core architectural foundation.</p>
           <div className="flex items-center gap-4">
-            <span className="inline-flex items-center gap-1.5 text-xs text-[#8FA6BF]">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#22C55E]"></span>
+            <span className="inline-flex items-center gap-1.5 text-xs text-[#737373]">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#15803D]"></span>
               Zero-Trust API Isolation
             </span>
             <span>·</span>

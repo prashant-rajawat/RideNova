@@ -12,6 +12,14 @@ import {
   Vehicle,
   AvailableRideSummary,
   RideStatus,
+  Payment,
+  Review,
+  PromoCode,
+  Notification,
+  SupportTicket,
+  AdminOverviewData,
+  AdminDriver,
+  ReceiptData,
 } from '../types/index.ts';
 
 const API_BASE_URL =
@@ -403,5 +411,200 @@ export const api = {
       data: RideWithStops[];
       count: number;
     }>('/driver/history');
+  },
+
+  /**
+   * Cancel an active ride: POST /api/rides/:id/cancel
+   */
+  async cancelRide(rideId: string, reason?: string): Promise<{ success: boolean; message: string; data: RideWithStops }> {
+    return request<{ success: boolean; message: string; data: RideWithStops }>(`/rides/${rideId}/cancel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    });
+  },
+
+  /**
+   * Process payment for a ride (Stripe test mode / Card): POST /api/rides/:id/pay
+   */
+  async payRide(
+    rideId: string,
+    payload: { paymentMethod?: string; stripeToken?: string; promoCode?: string } = {}
+  ): Promise<{ success: boolean; message: string; data: { payment: Payment; receipt: ReceiptData } }> {
+    return request<{ success: boolean; message: string; data: { payment: Payment; receipt: ReceiptData } }>(
+      `/rides/${rideId}/pay`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }
+    );
+  },
+
+  /**
+   * Submit post-ride driver rating and review: POST /api/rides/:id/review
+   */
+  async submitReview(
+    rideId: string,
+    rating: number,
+    comment?: string
+  ): Promise<{ success: boolean; message: string; data: Review }> {
+    return request<{ success: boolean; message: string; data: Review }>(`/rides/${rideId}/review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rating, comment }),
+    });
+  },
+
+  /**
+   * Get ride receipt: GET /api/rides/:id/receipt
+   */
+  async getReceipt(rideId: string): Promise<{ success: boolean; data: ReceiptData }> {
+    return request<{ success: boolean; data: ReceiptData }>(`/rides/${rideId}/receipt`);
+  },
+
+  /**
+   * Support Tickets: GET /api/support/tickets
+   */
+  async getSupportTickets(): Promise<{ success: boolean; data: SupportTicket[]; count: number }> {
+    return request<{ success: boolean; data: SupportTicket[]; count: number }>('/support/tickets');
+  },
+
+  /**
+   * Create Support Ticket: POST /api/support/tickets
+   */
+  async createSupportTicket(data: {
+    category: string;
+    subject: string;
+    description: string;
+    priority?: string;
+  }): Promise<{ success: boolean; message: string; data: SupportTicket }> {
+    return request<{ success: boolean; message: string; data: SupportTicket }>('/support/tickets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  },
+
+  /**
+   * Update Support Ticket Status: PATCH /api/support/tickets/:id
+   */
+  async updateSupportTicketStatus(
+    id: string,
+    status: string
+  ): Promise<{ success: boolean; message: string; data: SupportTicket }> {
+    return request<{ success: boolean; message: string; data: SupportTicket }>(`/support/tickets/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    });
+  },
+
+  /**
+   * Promo Codes: GET /api/promos
+   */
+  async getPromos(): Promise<{ success: boolean; data: PromoCode[] }> {
+    return request<{ success: boolean; data: PromoCode[] }>('/promos');
+  },
+
+  /**
+   * Validate Promo: POST /api/promos/validate
+   */
+  async validatePromo(
+    code: string,
+    fare: number
+  ): Promise<{
+    success: boolean;
+    data: { valid: boolean; discount: number; finalFare: number; message: string; promo?: PromoCode };
+  }> {
+    return request('/promos/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, fare }),
+    });
+  },
+
+  /**
+   * Admin: Create Promo: POST /api/promos
+   */
+  async createPromo(data: {
+    code: string;
+    discount_type: 'percentage' | 'fixed';
+    discount_value: number;
+    minimum_fare?: number;
+    maximum_discount?: number;
+    usage_limit?: number;
+  }): Promise<{ success: boolean; message: string; data: PromoCode }> {
+    return request('/promos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  },
+
+  /**
+   * Notifications: GET /api/notifications
+   */
+  async getNotifications(): Promise<{ success: boolean; data: Notification[]; count: number }> {
+    return request<{ success: boolean; data: Notification[]; count: number }>('/notifications');
+  },
+
+  /**
+   * Mark Notification Read: PATCH /api/notifications/:id/read
+   */
+  async markNotificationRead(id: string): Promise<{ success: boolean; message: string }> {
+    return request<{ success: boolean; message: string }>(`/notifications/${id}/read`, {
+      method: 'PATCH',
+    });
+  },
+
+  /**
+   * Admin: Overview: GET /api/admin/overview
+   */
+  async getAdminOverview(): Promise<{ success: boolean; data: AdminOverviewData }> {
+    return request<{ success: boolean; data: AdminOverviewData }>('/admin/overview');
+  },
+
+  /**
+   * Admin: Drivers: GET /api/admin/drivers
+   */
+  async getAdminDrivers(): Promise<{ success: boolean; data: AdminDriver[]; count: number }> {
+    return request<{ success: boolean; data: AdminDriver[]; count: number }>('/admin/drivers');
+  },
+
+  /**
+   * Admin: Update Driver Status: PATCH /api/admin/drivers/:id/status
+   */
+  async updateAdminDriverStatus(
+    id: string,
+    status: string
+  ): Promise<{ success: boolean; message: string; data: any }> {
+    return request(`/admin/drivers/${id}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    });
+  },
+
+  /**
+   * Admin: All Rides: GET /api/admin/rides
+   */
+  async getAdminRides(status?: string): Promise<{ success: boolean; data: RideWithStops[]; count: number }> {
+    const q = status ? `?status=${encodeURIComponent(status)}` : '';
+    return request<{ success: boolean; data: RideWithStops[]; count: number }>(`/admin/rides${q}`);
+  },
+
+  /**
+   * Admin: All Payments: GET /api/admin/payments
+   */
+  async getAdminPayments(): Promise<{ success: boolean; data: Payment[]; count: number }> {
+    return request<{ success: boolean; data: Payment[]; count: number }>('/admin/payments');
+  },
+
+  /**
+   * Admin: All Riders: GET /api/admin/riders
+   */
+  async getAdminRiders(): Promise<{ success: boolean; data: any[]; count: number }> {
+    return request<{ success: boolean; data: any[]; count: number }>('/admin/riders');
   },
 };

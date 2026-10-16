@@ -49,41 +49,41 @@ export const SignInPage: React.FC<SignInPageProps> = ({ onNavigate }) => {
 
   return (
     <div className="min-h-[80vh] flex items-center justify-center px-4 py-12">
-      <div className="w-full max-w-md rounded-xl border border-[#1E334D] bg-[#0F1C2E] p-8 shadow-2xl">
+      <div className="w-full max-w-md rounded-xl border border-[#E5E5E5] bg-[#FFFFFF] p-8 shadow-2xl">
         {/* Header */}
         <div className="text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#00C2FF] to-[#0EA5E9] text-[#07111F] font-black text-xl shadow-md">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#E21D2B] to-[#E21D2B] text-[#FFFFFF] font-black text-xl shadow-md">
             RN
           </div>
-          <h1 className="mt-4 text-2xl font-extrabold tracking-tight text-[#E5F2FF]">
+          <h1 className="mt-4 text-2xl font-extrabold tracking-tight text-[#171717]">
             Sign in to RideNova
           </h1>
-          <p className="mt-1.5 text-xs text-[#8FA6BF]">
+          <p className="mt-1.5 text-xs text-[#737373]">
             Your ride. Your route. Your time.
           </p>
         </div>
 
         {/* Error notification */}
         {error && (
-          <div className="mt-5 flex items-center gap-2 rounded-lg border border-[#EF4444]/30 bg-[#EF4444]/10 p-3 text-xs text-[#EF4444]">
+          <div className="mt-5 flex items-center gap-2 rounded-lg border border-[#B91C1C]/30 bg-[#B91C1C]/10 p-3 text-xs text-[#B91C1C]">
             <AlertCircle className="h-4 w-4 shrink-0" />
             <span>{error}</span>
           </div>
         )}
 
         {/* Clerk configuration status notice */}
-        <div className="mt-5 rounded-lg border border-[#1E334D] bg-[#07111F] p-3 text-xs">
+        <div className="mt-5 rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] p-3 text-xs">
           <div className="flex items-center justify-between">
-            <span className="text-[#8FA6BF] flex items-center gap-1.5">
-              <Key className="h-3.5 w-3.5 text-[#00C2FF]" />
+            <span className="text-[#737373] flex items-center gap-1.5">
+              <Key className="h-3.5 w-3.5 text-[#E21D2B]" />
               Clerk Auth Status
             </span>
-            <span className={`font-medium ${isClerkConfigured ? 'text-[#22C55E]' : 'text-[#F59E0B]'}`}>
+            <span className={`font-medium ${isClerkConfigured ? 'text-[#15803D]' : 'text-[#B45309]'}`}>
               {isClerkConfigured ? 'Live Clerk SDK Active' : 'Dev Simulation Mode'}
             </span>
           </div>
           {!isClerkConfigured && (
-            <p className="mt-1 text-[11px] text-[#8FA6BF] leading-normal">
+            <p className="mt-1 text-[11px] text-[#737373] leading-normal">
               To connect live Clerk, set <code>VITE_CLERK_PUBLISHABLE_KEY</code> in <code>.env</code>. Full session sync & role guards are operational in both modes.
             </p>
           )}
@@ -94,7 +94,7 @@ export const SignInPage: React.FC<SignInPageProps> = ({ onNavigate }) => {
           <button
             type="button"
             onClick={() => handleQuickDemoLogin('rider')}
-            className="w-full flex items-center justify-center gap-2 rounded-lg border border-[#1E334D] bg-[#07111F] py-2.5 px-4 text-xs font-semibold text-[#E5F2FF] hover:border-[#00C2FF] hover:text-[#00C2FF] transition-all"
+            className="w-full flex items-center justify-center gap-2 rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] py-2.5 px-4 text-xs font-semibold text-[#171717] hover:border-[#E21D2B] hover:text-[#E21D2B] transition-all"
           >
             <svg className="h-4 w-4" viewBox="0 0 24 24">
               <path
@@ -119,15 +119,15 @@ export const SignInPage: React.FC<SignInPageProps> = ({ onNavigate }) => {
         </div>
 
         <div className="my-5 flex items-center gap-3">
-          <div className="h-px flex-1 bg-[#1E334D]" />
-          <span className="text-[11px] text-[#8FA6BF] uppercase tracking-wider">or sign in with email</span>
-          <div className="h-px flex-1 bg-[#1E334D]" />
+          <div className="h-px flex-1 bg-[#E5E5E5]" />
+          <span className="text-[11px] text-[#737373] uppercase tracking-wider">or sign in with email</span>
+          <div className="h-px flex-1 bg-[#E5E5E5]" />
         </div>
 
         {/* Credentials Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-[#8FA6BF] mb-1">
+            <label className="block text-xs font-medium text-[#737373] mb-1">
               Email Address
             </label>
             <input
@@ -136,16 +136,16 @@ export const SignInPage: React.FC<SignInPageProps> = ({ onNavigate }) => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="rider@example.com"
-              className="w-full rounded-lg border border-[#1E334D] bg-[#07111F] px-3.5 py-2.5 text-xs text-[#E5F2FF] placeholder-[#8FA6BF]/60 focus:border-[#00C2FF] focus:outline-none"
+              className="w-full rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] px-3.5 py-2.5 text-xs text-[#171717] placeholder-[#737373]/60 focus:border-[#E21D2B] focus:outline-none"
             />
           </div>
 
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="block text-xs font-medium text-[#8FA6BF]">
+              <label className="block text-xs font-medium text-[#737373]">
                 Password
               </label>
-              <span className="text-[11px] text-[#00C2FF] hover:underline cursor-pointer">
+              <span className="text-[11px] text-[#E21D2B] hover:underline cursor-pointer">
                 Forgot password?
               </span>
             </div>
@@ -155,14 +155,14 @@ export const SignInPage: React.FC<SignInPageProps> = ({ onNavigate }) => {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••••••"
-              className="w-full rounded-lg border border-[#1E334D] bg-[#07111F] px-3.5 py-2.5 text-xs text-[#E5F2FF] placeholder-[#8FA6BF]/60 focus:border-[#00C2FF] focus:outline-none"
+              className="w-full rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] px-3.5 py-2.5 text-xs text-[#171717] placeholder-[#737373]/60 focus:border-[#E21D2B] focus:outline-none"
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full flex items-center justify-center gap-2 rounded-lg bg-[#00C2FF] py-2.5 px-4 text-xs font-semibold text-[#07111F] shadow-md shadow-[#00C2FF]/20 hover:bg-[#00C2FF]/90 transition-all disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-2 rounded-lg bg-[#E21D2B] py-2.5 px-4 text-xs font-semibold text-[#FFFFFF] shadow-md shadow-[#E21D2B]/20 hover:bg-[#E21D2B]/90 transition-all disabled:opacity-50"
           >
             <LogIn className="h-4 w-4" />
             <span>{loading ? 'Authenticating...' : 'Sign In'}</span>
@@ -170,44 +170,44 @@ export const SignInPage: React.FC<SignInPageProps> = ({ onNavigate }) => {
         </form>
 
         {/* Quick Testing Profiles (Step 2 Testing Requirement) */}
-        <div className="mt-6 pt-5 border-t border-[#1E334D]">
-          <span className="block text-[11px] font-semibold text-[#8FA6BF] uppercase tracking-wider mb-2.5">
+        <div className="mt-6 pt-5 border-t border-[#E5E5E5]">
+          <span className="block text-[11px] font-semibold text-[#737373] uppercase tracking-wider mb-2.5">
             Step 2 Test Authenticated Sessions:
           </span>
           <div className="grid grid-cols-3 gap-2">
             <button
               type="button"
               onClick={() => handleQuickDemoLogin('rider')}
-              className="rounded-lg border border-[#1E334D] bg-[#07111F] p-2 text-center text-[11px] font-medium text-[#E5F2FF] hover:border-[#00C2FF] hover:text-[#00C2FF]"
+              className="rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] p-2 text-center text-[11px] font-medium text-[#171717] hover:border-[#E21D2B] hover:text-[#E21D2B]"
             >
               <span className="block font-bold">Rider</span>
-              <span className="text-[10px] text-[#8FA6BF]">Default</span>
+              <span className="text-[10px] text-[#737373]">Default</span>
             </button>
             <button
               type="button"
               onClick={() => handleQuickDemoLogin('driver')}
-              className="rounded-lg border border-[#1E334D] bg-[#07111F] p-2 text-center text-[11px] font-medium text-[#E5F2FF] hover:border-[#0EA5E9] hover:text-[#0EA5E9]"
+              className="rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] p-2 text-center text-[11px] font-medium text-[#171717] hover:border-[#E21D2B] hover:text-[#E21D2B]"
             >
               <span className="block font-bold">Driver</span>
-              <span className="text-[10px] text-[#8FA6BF]">Promoted</span>
+              <span className="text-[10px] text-[#737373]">Promoted</span>
             </button>
             <button
               type="button"
               onClick={() => handleQuickDemoLogin('admin')}
-              className="rounded-lg border border-[#1E334D] bg-[#07111F] p-2 text-center text-[11px] font-medium text-[#E5F2FF] hover:border-[#22C55E] hover:text-[#22C55E]"
+              className="rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] p-2 text-center text-[11px] font-medium text-[#171717] hover:border-[#15803D] hover:text-[#15803D]"
             >
               <span className="block font-bold">Admin</span>
-              <span className="text-[10px] text-[#8FA6BF]">Staff</span>
+              <span className="text-[10px] text-[#737373]">Staff</span>
             </button>
           </div>
         </div>
 
         {/* Footer Link */}
-        <div className="mt-6 text-center text-xs text-[#8FA6BF]">
+        <div className="mt-6 text-center text-xs text-[#737373]">
           Don't have an account?{' '}
           <button
             onClick={() => onNavigate('sign-up')}
-            className="font-semibold text-[#00C2FF] hover:underline"
+            className="font-semibold text-[#E21D2B] hover:underline"
           >
             Sign up for RideNova
           </button>
