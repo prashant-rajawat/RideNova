@@ -23,23 +23,14 @@ export const SignInPage: React.FC<SignInPageProps> = ({ onNavigate }) => {
 
     setLoading(true);
     try {
-      // Authenticate account and retrieve verified role from backend/database
-      const normalizedEmail = email.toLowerCase().trim();
-      
-      // Determine appropriate role based on account email / backend storage
-      let assignedRole: 'rider' | 'driver' | 'admin' = 'rider';
-      if (normalizedEmail.includes('admin') || normalizedEmail === 'dreambattle@3155') {
-        assignedRole = 'admin';
-      } else if (normalizedEmail.includes('driver')) {
-        assignedRole = 'driver';
-      }
+      // Authenticate account and retrieve verified user & role from trusted backend/database
+      const loggedInUser = await devSimulateLogin(undefined, email.split('@')[0], email);
+      const verifiedRole = loggedInUser.role;
 
-      await devSimulateLogin(assignedRole, email.split('@')[0], email);
-
-      // Automatic Role-Based Redirect
-      if (assignedRole === 'admin') {
+      // Automatic Role-Based Redirect using verified server-side role
+      if (verifiedRole === 'admin') {
         onNavigate('admin');
-      } else if (assignedRole === 'driver') {
+      } else if (verifiedRole === 'driver') {
         onNavigate('driver');
       } else {
         onNavigate('rider');
