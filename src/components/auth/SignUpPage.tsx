@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { UserPlus, Shield, CheckCircle2, AlertCircle, Sparkles } from 'lucide-react';
+import { UserPlus, Shield, AlertCircle, Car, User } from 'lucide-react';
 import { useAuthSession } from '../../context/AuthContext.tsx';
+import { UserRole } from '../../types/index.ts';
 
 interface SignUpPageProps {
   onNavigate: (route: string) => void;
@@ -8,6 +9,7 @@ interface SignUpPageProps {
 
 export const SignUpPage: React.FC<SignUpPageProps> = ({ onNavigate }) => {
   const { devSimulateLogin } = useAuthSession();
+  const [selectedRole, setSelectedRole] = useState<'customer' | 'driver'>('customer');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -23,11 +25,21 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onNavigate }) => {
       return;
     }
 
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters long.');
+      return;
+    }
+
     setLoading(true);
     try {
-      // Create user: backend enforces DEFAULT ROLE = rider
-      await devSimulateLogin('rider', name, email);
-      onNavigate('rider');
+      const backendRole: UserRole = selectedRole === 'driver' ? 'driver' : 'rider';
+      await devSimulateLogin(backendRole, name, email);
+
+      if (backendRole === 'driver') {
+        onNavigate('driver');
+      } else {
+        onNavigate('rider');
+      }
     } catch (err) {
       setError((err as Error).message || 'Failed to create account');
     } finally {
@@ -39,14 +51,14 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onNavigate }) => {
     <div className="min-h-[80vh] flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-md rounded-xl border border-[#E5E5E5] bg-[#FFFFFF] p-8 shadow-2xl">
         <div className="text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#E21D2B] to-[#E21D2B] text-[#FFFFFF] font-black text-xl shadow-md">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-[#E21D2B] text-[#FFFFFF] font-black text-xl shadow-md">
             RN
           </div>
           <h1 className="mt-4 text-2xl font-extrabold tracking-tight text-[#171717]">
             Create your RideNova account
           </h1>
           <p className="mt-1.5 text-xs text-[#737373]">
-            Your ride. Your route. Your time.
+            Choose your account type to get started.
           </p>
         </div>
 
@@ -57,16 +69,43 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onNavigate }) => {
           </div>
         )}
 
-        {/* Role Security Notice */}
-        <div className="mt-5 rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] p-3 text-xs">
-          <div className="flex items-center gap-2 text-[#E21D2B] font-semibold">
-            <Shield className="h-4 w-4" />
-            <span>Role Assignment Security</span>
-          </div>
-          <p className="mt-1 text-[11px] text-[#737373] leading-relaxed">
-            All newly registered accounts are automatically provisioned with the safe default role: <strong className="text-[#171717]">Rider</strong>. Driver onboarding occurs through verified verification workflows.
-          </p>
+        {/* Account Type Selector Options */}
+        <div className="mt-6 grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={() => setSelectedRole('customer')}
+            className={`flex flex-col items-center justify-center p-3.5 rounded-xl border transition-all text-xs font-semibold ${
+              selectedRole === 'customer'
+                ? 'border-[#E21D2B] bg-[#FFF1F2] text-[#E21D2B] shadow-2xs'
+                : 'border-[#E5E5E5] bg-white text-[#737373] hover:border-[#171717]'
+            }`}
+          >
+            <User className="h-5 w-5 mb-1.5" />
+            <span>Customer</span>
+            <span className="text-[10px] font-normal text-[#737373]">Book rides & track trips</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedRole('driver')}
+            className={`flex flex-col items-center justify-center p-3.5 rounded-xl border transition-all text-xs font-semibold ${
+              selectedRole === 'driver'
+                ? 'border-[#E21D2B] bg-[#FFF1F2] text-[#E21D2B] shadow-2xs'
+                : 'border-[#E5E5E5] bg-white text-[#737373] hover:border-[#171717]'
+            }`}
+          >
+            <Car className="h-5 w-5 mb-1.5" />
+            <span>Driver</span>
+            <span className="text-[10px] font-normal text-[#737373]">Accept rides & earn</span>
+          </button>
         </div>
+
+        {selectedRole === 'driver' && (
+          <div className="mt-4 rounded-lg border border-[#B45309]/30 bg-[#FFFBEB] p-3 text-xs text-[#B45309]">
+            <span className="font-semibold block mb-0.5">Driver Onboarding Notice</span>
+            New driver accounts require vehicle verification and approval before receiving live ride requests.
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="mt-5 space-y-4">
           <div>
@@ -118,7 +157,13 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onNavigate }) => {
             className="w-full flex items-center justify-center gap-2 rounded-lg bg-[#E21D2B] py-2.5 px-4 text-xs font-semibold text-[#FFFFFF] shadow-md shadow-[#E21D2B]/20 hover:bg-[#E21D2B]/90 transition-all disabled:opacity-50"
           >
             <UserPlus className="h-4 w-4" />
-            <span>{loading ? 'Creating Account...' : 'Sign Up as Rider'}</span>
+            <span>
+              {loading
+                ? 'Creating Account...'
+                : selectedRole === 'driver'
+                ? 'Sign Up as Driver'
+                : 'Sign Up as Customer'}
+            </span>
           </button>
         </form>
 
@@ -126,7 +171,7 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onNavigate }) => {
           Already have an account?{' '}
           <button
             onClick={() => onNavigate('sign-in')}
-            className="font-semibold text-[#E21D2B] hover:underline"
+            className="font-semibold text-[#E21D2B] hover:underline bg-transparent border-none p-0 cursor-pointer"
           >
             Sign in
           </button>

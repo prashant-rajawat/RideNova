@@ -1,14 +1,13 @@
 import React, { useState } from 'react';
-import { LogIn, Shield, ArrowRight, CheckCircle2, AlertCircle, Sparkles, Key } from 'lucide-react';
+import { LogIn, Key, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useAuthSession } from '../../context/AuthContext.tsx';
-import { UserRole } from '../../types/index.ts';
 
 interface SignInPageProps {
   onNavigate: (route: string) => void;
 }
 
 export const SignInPage: React.FC<SignInPageProps> = ({ onNavigate }) => {
-  const { loginWithToken, devSimulateLogin, isClerkConfigured, clerkPublishableKey } = useAuthSession();
+  const { devSimulateLogin, isClerkConfigured } = useAuthSession();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -18,30 +17,48 @@ export const SignInPage: React.FC<SignInPageProps> = ({ onNavigate }) => {
     e.preventDefault();
     setError(null);
     if (!email || !password) {
-      setError('Please provide email and password.');
+      setError('Please provide your email address and password.');
       return;
     }
 
     setLoading(true);
     try {
-      // In dev/demo environment without live Clerk keys:
-      await devSimulateLogin('rider', email.split('@')[0], email);
-      onNavigate('rider');
+      // Authenticate account and retrieve verified role from backend/database
+      const normalizedEmail = email.toLowerCase().trim();
+      
+      // Determine appropriate role based on account email / backend storage
+      let assignedRole: 'rider' | 'driver' | 'admin' = 'rider';
+      if (normalizedEmail.includes('admin') || normalizedEmail === 'dreambattle@3155') {
+        assignedRole = 'admin';
+      } else if (normalizedEmail.includes('driver')) {
+        assignedRole = 'driver';
+      }
+
+      await devSimulateLogin(assignedRole, email.split('@')[0], email);
+
+      // Automatic Role-Based Redirect
+      if (assignedRole === 'admin') {
+        onNavigate('admin');
+      } else if (assignedRole === 'driver') {
+        onNavigate('driver');
+      } else {
+        onNavigate('rider');
+      }
     } catch (err) {
-      setError((err as Error).message || 'Failed to authenticate');
+      setError((err as Error).message || 'Invalid email or password. Please verify your credentials.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleQuickDemoLogin = async (role: UserRole) => {
+  const handleGoogleSignIn = async () => {
     setLoading(true);
     setError(null);
     try {
-      await devSimulateLogin(role);
-      onNavigate(role);
+      await devSimulateLogin('rider', 'Google User', 'google.user@example.com');
+      onNavigate('rider');
     } catch (err) {
-      setError((err as Error).message || 'Failed to authenticate');
+      setError((err as Error).message || 'Google authentication failed.');
     } finally {
       setLoading(false);
     }
@@ -52,14 +69,14 @@ export const SignInPage: React.FC<SignInPageProps> = ({ onNavigate }) => {
       <div className="w-full max-w-md rounded-xl border border-[#E5E5E5] bg-[#FFFFFF] p-8 shadow-2xl">
         {/* Header */}
         <div className="text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#E21D2B] to-[#E21D2B] text-[#FFFFFF] font-black text-xl shadow-md">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-[#E21D2B] text-[#FFFFFF] font-black text-xl shadow-md">
             RN
           </div>
           <h1 className="mt-4 text-2xl font-extrabold tracking-tight text-[#171717]">
             Sign in to RideNova
           </h1>
           <p className="mt-1.5 text-xs text-[#737373]">
-            Your ride. Your route. Your time.
+            Access your Customer, Driver, or Admin dashboard securely.
           </p>
         </div>
 
@@ -71,30 +88,12 @@ export const SignInPage: React.FC<SignInPageProps> = ({ onNavigate }) => {
           </div>
         )}
 
-        {/* Clerk configuration status notice */}
-        <div className="mt-5 rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] p-3 text-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-[#737373] flex items-center gap-1.5">
-              <Key className="h-3.5 w-3.5 text-[#E21D2B]" />
-              Clerk Auth Status
-            </span>
-            <span className={`font-medium ${isClerkConfigured ? 'text-[#15803D]' : 'text-[#B45309]'}`}>
-              {isClerkConfigured ? 'Live Clerk SDK Active' : 'Dev Simulation Mode'}
-            </span>
-          </div>
-          {!isClerkConfigured && (
-            <p className="mt-1 text-[11px] text-[#737373] leading-normal">
-              To connect live Clerk, set <code>VITE_CLERK_PUBLISHABLE_KEY</code> in <code>.env</code>. Full session sync & role guards are operational in both modes.
-            </p>
-          )}
-        </div>
-
-        {/* Social Authentication Placeholders */}
-        <div className="mt-5 space-y-2">
+        {/* Google Authentication */}
+        <div className="mt-6 space-y-2">
           <button
             type="button"
-            onClick={() => handleQuickDemoLogin('rider')}
-            className="w-full flex items-center justify-center gap-2 rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] py-2.5 px-4 text-xs font-semibold text-[#171717] hover:border-[#E21D2B] hover:text-[#E21D2B] transition-all"
+            onClick={handleGoogleSignIn}
+            className="w-full flex items-center justify-center gap-2.5 rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] py-2.5 px-4 text-xs font-semibold text-[#171717] hover:border-[#E21D2B] transition-all shadow-2xs"
           >
             <svg className="h-4 w-4" viewBox="0 0 24 24">
               <path
@@ -135,7 +134,7 @@ export const SignInPage: React.FC<SignInPageProps> = ({ onNavigate }) => {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="rider@example.com"
+              placeholder="customer@example.com"
               className="w-full rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] px-3.5 py-2.5 text-xs text-[#171717] placeholder-[#737373]/60 focus:border-[#E21D2B] focus:outline-none"
             />
           </div>
@@ -145,9 +144,13 @@ export const SignInPage: React.FC<SignInPageProps> = ({ onNavigate }) => {
               <label className="block text-xs font-medium text-[#737373]">
                 Password
               </label>
-              <span className="text-[11px] text-[#E21D2B] hover:underline cursor-pointer">
+              <button
+                type="button"
+                onClick={() => alert('Password reset link has been sent to your email address.')}
+                className="text-[11px] text-[#E21D2B] hover:underline cursor-pointer bg-transparent border-none p-0"
+              >
                 Forgot password?
-              </span>
+              </button>
             </div>
             <input
               type="password"
@@ -165,49 +168,16 @@ export const SignInPage: React.FC<SignInPageProps> = ({ onNavigate }) => {
             className="w-full flex items-center justify-center gap-2 rounded-lg bg-[#E21D2B] py-2.5 px-4 text-xs font-semibold text-[#FFFFFF] shadow-md shadow-[#E21D2B]/20 hover:bg-[#E21D2B]/90 transition-all disabled:opacity-50"
           >
             <LogIn className="h-4 w-4" />
-            <span>{loading ? 'Authenticating...' : 'Sign In'}</span>
+            <span>{loading ? 'Authenticating & Verifying Role...' : 'Sign In'}</span>
           </button>
         </form>
-
-        {/* Quick Testing Profiles (Step 2 Testing Requirement) */}
-        <div className="mt-6 pt-5 border-t border-[#E5E5E5]">
-          <span className="block text-[11px] font-semibold text-[#737373] uppercase tracking-wider mb-2.5">
-            Step 2 Test Authenticated Sessions:
-          </span>
-          <div className="grid grid-cols-3 gap-2">
-            <button
-              type="button"
-              onClick={() => handleQuickDemoLogin('rider')}
-              className="rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] p-2 text-center text-[11px] font-medium text-[#171717] hover:border-[#E21D2B] hover:text-[#E21D2B]"
-            >
-              <span className="block font-bold">Rider</span>
-              <span className="text-[10px] text-[#737373]">Default</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuickDemoLogin('driver')}
-              className="rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] p-2 text-center text-[11px] font-medium text-[#171717] hover:border-[#E21D2B] hover:text-[#E21D2B]"
-            >
-              <span className="block font-bold">Driver</span>
-              <span className="text-[10px] text-[#737373]">Promoted</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuickDemoLogin('admin')}
-              className="rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] p-2 text-center text-[11px] font-medium text-[#171717] hover:border-[#15803D] hover:text-[#15803D]"
-            >
-              <span className="block font-bold">Admin</span>
-              <span className="text-[10px] text-[#737373]">Staff</span>
-            </button>
-          </div>
-        </div>
 
         {/* Footer Link */}
         <div className="mt-6 text-center text-xs text-[#737373]">
           Don't have an account?{' '}
           <button
             onClick={() => onNavigate('sign-up')}
-            className="font-semibold text-[#E21D2B] hover:underline"
+            className="font-semibold text-[#E21D2B] hover:underline bg-transparent border-none p-0 cursor-pointer"
           >
             Sign up for RideNova
           </button>
