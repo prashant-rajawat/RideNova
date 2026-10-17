@@ -447,4 +447,127 @@ export const driverController = {
       next(error);
     }
   },
+
+  /**
+   * POST /api/driver/kyc
+   * Multi-Step Driver KYC Onboarding (Personal, License, Vehicle, Bank, Submit)
+   */
+  async updateKyc(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Authentication required' },
+        });
+        return;
+      }
+
+      const updated = await driverService.updateDriverKyc(req.user.id, req.body || {});
+      res.status(200).json({
+        success: true,
+        message: req.body?.submitForReview
+          ? 'KYC submitted successfully! Our verification team will review your documents.'
+          : 'KYC draft progress saved successfully.',
+        data: updated,
+      });
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        res.status(400).json({
+          success: false,
+          error: { code: error.code, message: error.message },
+        });
+        return;
+      }
+      next(error);
+    }
+  },
+
+  /**
+   * GET /api/driver/earnings
+   * Retrieve driver earnings breakdown and metrics
+   */
+  async getEarnings(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Authentication required' },
+        });
+        return;
+      }
+
+      const summary = await driverService.getDriverEarningsSummary(req.user.id);
+      res.status(200).json({
+        success: true,
+        data: summary,
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  /**
+   * GET /api/driver/payouts
+   * Retrieve driver payout transactions
+   */
+  async getPayouts(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Authentication required' },
+        });
+        return;
+      }
+
+      const payouts = await driverService.getDriverPayouts(req.user.id);
+      res.status(200).json({
+        success: true,
+        data: payouts,
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  /**
+   * POST /api/driver/payouts
+   * Request withdrawal / payout of available earnings
+   */
+  async requestPayout(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Authentication required' },
+        });
+        return;
+      }
+
+      const amount = Number(req.body?.amount);
+      if (isNaN(amount) || amount <= 0) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_AMOUNT', message: 'Please enter a valid payout amount.' },
+        });
+        return;
+      }
+
+      const payout = await driverService.requestPayout(req.user.id, amount);
+      res.status(200).json({
+        success: true,
+        message: `Payout request for ₹${amount} initiated successfully. Funds settled to your bank account.`,
+        data: payout,
+      });
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        res.status(400).json({
+          success: false,
+          error: { code: error.code, message: error.message },
+        });
+        return;
+      }
+      next(error);
+    }
+  },
 };

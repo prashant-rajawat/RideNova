@@ -3,6 +3,7 @@ import { User, Mail, Phone, Shield, ArrowLeft, Check, AlertCircle, Save, Car, Cr
 import { useAuthSession } from '../../context/AuthContext.tsx';
 import { api } from '../../lib/api.ts';
 import { DriverProfile } from '../../types/index.ts';
+import { toCanonicalRole, toDisplayRole } from '../../lib/roles.ts';
 
 interface ProfilePageProps {
   onNavigate: (route: string) => void;
@@ -72,7 +73,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate }) => {
         className="inline-flex items-center gap-2 text-xs font-medium text-[#737373] hover:text-[#171717] mb-6 transition-colors"
       >
         <ArrowLeft className="h-4 w-4" />
-        <span>Back to {user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : ''} Dashboard</span>
+        <span>Back to {toDisplayRole(user?.role)} Dashboard</span>
       </button>
 
       <div className="rounded-xl border border-[#E5E5E5] bg-[#FFFFFF] p-6 sm:p-8 shadow-sm">
@@ -86,7 +87,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate }) => {
               <p className="text-xs text-[#737373]">{user?.email}</p>
               <div className="mt-2 flex items-center gap-2">
                 <span className="text-[11px] font-mono px-2 py-0.5 rounded uppercase font-bold bg-[#E21D2B]/10 text-[#E21D2B] border border-[#E21D2B]/30">
-                  {user?.role}
+                  {toCanonicalRole(user?.role)}
                 </span>
                 <span className="text-[11px] text-[#737373]">Database Verified</span>
               </div>

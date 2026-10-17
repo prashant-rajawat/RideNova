@@ -176,7 +176,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
 
   const navItems = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-    { id: 'drivers', label: 'Drivers Fleet', icon: Car, badge: drivers.length },
+    { id: 'drivers', label: 'Driver Partners', icon: Car, badge: drivers.length },
     { id: 'rides', label: 'All Rides', icon: Navigation, badge: rides.length },
     { id: 'payments', label: 'Payments Ledger', icon: CreditCard },
     {
@@ -186,7 +186,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
       badge: tickets.filter((t) => t.status !== 'resolved' && t.status !== 'closed').length || undefined,
     },
     { id: 'promos', label: 'Promo Codes', icon: Ticket, badge: promos.length },
-    { id: 'riders', label: 'Riders Registry', icon: Users, badge: riders.length },
+    { id: 'riders', label: 'Customer Management', icon: Users, badge: riders.length },
   ];
 
   const filteredRides = rides.filter((r) => {
@@ -402,7 +402,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
         <div className="mt-6 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#E5E5E5]">
             <div>
-              <h2 className="text-base font-bold text-[#171717]">Registered Driver Fleet ({drivers.length})</h2>
+              <h2 className="text-base font-bold text-[#171717]">Driver Partners Registry ({drivers.length})</h2>
               <p className="text-xs text-[#737373]">
                 Approve licenses, monitor vehicle assignments, and manage operational status.
               </p>
@@ -787,8 +787,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
       {activeTab === 'riders' && (
         <div className="mt-6 space-y-4">
           <div className="pb-3 border-b border-[#E5E5E5]">
-            <h2 className="text-base font-bold text-[#171717]">Registered Rider Accounts ({riders.length})</h2>
-            <p className="text-xs text-[#737373]">Clerk mapped rider accounts stored in PostgreSQL.</p>
+            <h2 className="text-base font-bold text-[#171717]">Customer Accounts ({riders.length})</h2>
+            <p className="text-xs text-[#737373]">Clerk mapped customer accounts stored in PostgreSQL.</p>
           </div>
 
           <div className="rounded-xl border border-[#E5E5E5] bg-[#FFFFFF] overflow-hidden shadow-sm">

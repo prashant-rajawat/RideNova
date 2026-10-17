@@ -44,7 +44,13 @@ import { useAuthSession } from './context/AuthContext.tsx';
 export default function App() {
   const health = useHealth();
   const { user, isAuthenticated, isLoading: authLoading } = useAuthSession();
-  const [currentRoute, setCurrentRoute] = useState<string>('home');
+  const [currentRoute, setCurrentRoute] = useState<string>(() => {
+    try {
+      return sessionStorage.getItem('ridenova_route') || 'home';
+    } catch {
+      return 'home';
+    }
+  });
   const [attemptedRole, setAttemptedRole] = useState<string>('');
   const [isSchemaModalOpen, setIsSchemaModalOpen] = useState(false);
 
@@ -56,80 +62,14 @@ export default function App() {
   };
 
   /**
-   * Safe Route Navigation with Role Guards
+   * Safe Route Navigation with Declarative Route State
    */
   const handleNavigate = (targetRoute: string) => {
-    // 1. Rider Route Guard
-    if (targetRoute === 'rider') {
-      if (!isAuthenticated) {
-        setCurrentRoute('sign-in');
-        return;
-      }
-      if (user?.role !== 'rider' && user?.role !== 'admin') {
-        setAttemptedRole('rider');
-        setCurrentRoute('access-denied');
-        return;
-      }
-      setCurrentRoute('rider');
-      return;
+    try {
+      sessionStorage.setItem('ridenova_route', targetRoute);
+    } catch {
+      // ignore storage errors
     }
-
-    // 2. Book Ride Route Guard (Rider only)
-    if (targetRoute === 'book-ride') {
-      if (!isAuthenticated) {
-        setCurrentRoute('sign-in');
-        return;
-      }
-      if (user?.role !== 'rider' && user?.role !== 'admin') {
-        setAttemptedRole('rider');
-        setCurrentRoute('access-denied');
-        return;
-      }
-      setCurrentRoute('book-ride');
-      return;
-    }
-
-    // 3. Driver Route Guard
-    if (targetRoute === 'driver') {
-      if (!isAuthenticated) {
-        setCurrentRoute('sign-in');
-        return;
-      }
-      if (user?.role !== 'driver' && user?.role !== 'admin') {
-        setAttemptedRole('driver');
-        setCurrentRoute('access-denied');
-        return;
-      }
-      setCurrentRoute('driver');
-      return;
-    }
-
-    // 4. Admin Route Guard
-    if (targetRoute === 'admin') {
-      if (!isAuthenticated) {
-        setCurrentRoute('sign-in');
-        return;
-      }
-      if (user?.role !== 'admin') {
-        setAttemptedRole('admin');
-        setCurrentRoute('access-denied');
-        return;
-      }
-      setCurrentRoute('admin');
-      return;
-    }
-
-    // 5. Profile Route Guard
-    if (targetRoute === 'profile') {
-      if (!isAuthenticated) {
-        setCurrentRoute('sign-in');
-        return;
-      }
-      setCurrentRoute('profile');
-      return;
-    }
-
-    // Default routes
     setCurrentRoute(targetRoute);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -160,26 +100,88 @@ export default function App() {
       />
 
       <main className="flex-1">
-        {/* Route Views */}
+        {/* Public Routes */}
+        {currentRoute === 'home' && <LandingPage onNavigate={handleNavigate} />}
         {currentRoute === 'sign-in' && <SignInPage onNavigate={handleNavigate} />}
-
         {currentRoute === 'sign-up' && <SignUpPage onNavigate={handleNavigate} />}
 
-        {currentRoute === 'book-ride' && <BookingPage onNavigate={handleNavigate} />}
-
-        {currentRoute === 'rider' && <RiderDashboard onNavigate={handleNavigate} />}
-
-        {currentRoute === 'driver' && <DriverDashboard onNavigate={handleNavigate} />}
-
-        {currentRoute === 'admin' && <AdminDashboard onNavigate={handleNavigate} />}
-
-        {currentRoute === 'profile' && <ProfilePage onNavigate={handleNavigate} />}
-
-        {currentRoute === 'access-denied' && (
-          <AccessDeniedPage attemptedRole={attemptedRole} onNavigate={handleNavigate} />
+        {/* Protected Admin Route */}
+        {currentRoute === 'admin' && (
+          authLoading ? (
+            <div className="min-h-[60vh] flex flex-col items-center justify-center gap-3">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#E21D2B] border-t-transparent" />
+              <p className="text-xs font-semibold text-[#737373]">Verifying administrator credentials...</p>
+            </div>
+          ) : !isAuthenticated ? (
+            <SignInPage onNavigate={handleNavigate} />
+          ) : user?.role !== 'admin' ? (
+            <AccessDeniedPage attemptedRole="admin" onNavigate={handleNavigate} />
+          ) : (
+            <AdminDashboard onNavigate={handleNavigate} />
+          )
         )}
 
-        {currentRoute === 'home' && <LandingPage onNavigate={handleNavigate} />}
+        {/* Protected Driver Route */}
+        {currentRoute === 'driver' && (
+          authLoading ? (
+            <div className="min-h-[60vh] flex flex-col items-center justify-center gap-3">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#E21D2B] border-t-transparent" />
+              <p className="text-xs font-semibold text-[#737373]">Loading Driver Partner console...</p>
+            </div>
+          ) : !isAuthenticated ? (
+            <SignInPage onNavigate={handleNavigate} />
+          ) : user?.role !== 'driver' && user?.role !== 'admin' ? (
+            <AccessDeniedPage attemptedRole="driver" onNavigate={handleNavigate} />
+          ) : (
+            <DriverDashboard onNavigate={handleNavigate} />
+          )
+        )}
+
+        {/* Protected Rider / Customer Route */}
+        {currentRoute === 'rider' && (
+          authLoading ? (
+            <div className="min-h-[60vh] flex flex-col items-center justify-center gap-3">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#E21D2B] border-t-transparent" />
+              <p className="text-xs font-semibold text-[#737373]">Loading Customer dashboard...</p>
+            </div>
+          ) : !isAuthenticated ? (
+            <SignInPage onNavigate={handleNavigate} />
+          ) : (
+            <RiderDashboard onNavigate={handleNavigate} />
+          )
+        )}
+
+        {/* Protected Booking Route */}
+        {currentRoute === 'book-ride' && (
+          authLoading ? (
+            <div className="min-h-[60vh] flex flex-col items-center justify-center gap-3">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#E21D2B] border-t-transparent" />
+              <p className="text-xs font-semibold text-[#737373]">Preparing ride booking...</p>
+            </div>
+          ) : !isAuthenticated ? (
+            <SignInPage onNavigate={handleNavigate} />
+          ) : (
+            <BookingPage onNavigate={handleNavigate} />
+          )
+        )}
+
+        {/* Protected Profile Route */}
+        {currentRoute === 'profile' && (
+          authLoading ? (
+            <div className="min-h-[60vh] flex flex-col items-center justify-center gap-3">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#E21D2B] border-t-transparent" />
+              <p className="text-xs font-semibold text-[#737373]">Loading account profile...</p>
+            </div>
+          ) : !isAuthenticated ? (
+            <SignInPage onNavigate={handleNavigate} />
+          ) : (
+            <ProfilePage onNavigate={handleNavigate} />
+          )
+        )}
+
+        {currentRoute === 'access-denied' && (
+          <AccessDeniedPage attemptedRole={attemptedRole || 'restricted'} onNavigate={handleNavigate} />
+        )}
       </main>
 
       {/* Schema Inspector Modal */}

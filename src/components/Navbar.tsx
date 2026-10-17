@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Menu, X, ChevronDown, LogOut, User, Settings, ShieldCheck } from 'lucide-react';
 import { useAuthSession } from '../context/AuthContext.tsx';
+import { toCanonicalRole, toDisplayRole } from '../lib/roles.ts';
 
 interface NavbarProps {
   currentRoute: string;
@@ -23,6 +24,9 @@ export const Navbar: React.FC<NavbarProps> = ({
     rider: 'bg-[#FFF1F2] text-[#E21D2B] border-[#E21D2B]/30',
     driver: 'bg-[#FFF1F2] text-[#E21D2B] border-[#E21D2B]/30',
     admin: 'bg-[#15803D]/10 text-[#15803D] border-[#15803D]/30',
+    CUSTOMER: 'bg-[#FFF1F2] text-[#E21D2B] border-[#E21D2B]/30',
+    DRIVER: 'bg-[#FFF1F2] text-[#E21D2B] border-[#E21D2B]/30',
+    ADMIN: 'bg-[#15803D]/10 text-[#15803D] border-[#15803D]/30',
   };
 
   return (
@@ -109,7 +113,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <div className="text-left leading-tight">
                   <span className="font-bold text-[#171717] block max-w-[110px] truncate">{user.name}</span>
                   <span className="text-[10px] font-medium text-[#737373] uppercase tracking-wider">
-                    {user.role === 'admin' ? 'Administrator' : user.role === 'driver' ? 'Driver' : 'Customer'}
+                    {toDisplayRole(user.role)}
                   </span>
                 </div>
                 <ChevronDown className="h-3 w-3 text-[#737373]" />
@@ -120,8 +124,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <div className="px-3 py-2 border-b border-[#E5E5E5]">
                     <p className="font-bold text-[#171717] truncate">{user.name}</p>
                     <p className="text-[11px] text-[#737373] truncate">{user.email}</p>
-                    <span className={`mt-1.5 inline-block px-2 py-0.5 rounded text-[10px] font-mono uppercase font-bold border ${roleBadgeColors[user.role]}`}>
-                      {user.role}
+                    <span className={`mt-1.5 inline-block px-2 py-0.5 rounded text-[10px] font-mono uppercase font-bold border ${roleBadgeColors[toCanonicalRole(user.role)]}`}>
+                      {toCanonicalRole(user.role)}
                     </span>
                   </div>
 
@@ -228,7 +232,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   }}
                   className="w-full text-left px-3 py-2 rounded-lg bg-[#FFF1F2] text-[#E21D2B] font-bold text-xs"
                 >
-                  My Dashboard ({user.role})
+                  My Dashboard ({toDisplayRole(user.role)})
                 </button>
                 <button
                   onClick={() => {

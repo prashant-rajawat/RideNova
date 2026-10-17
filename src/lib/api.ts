@@ -20,6 +20,9 @@ import {
   AdminOverviewData,
   AdminDriver,
   ReceiptData,
+  DriverKycPayload,
+  DriverPayout,
+  DriverEarningsSummary,
 } from '../types/index.ts';
 
 const API_BASE_URL =
@@ -414,6 +417,70 @@ export const api = {
   },
 
   /**
+   * Driver: Submit or save KYC onboarding wizard progress: POST /api/driver/kyc
+   */
+  async submitDriverKyc(payload: DriverKycPayload): Promise<{
+    success: boolean;
+    message: string;
+    data: DriverProfile;
+  }> {
+    return request<{
+      success: boolean;
+      message: string;
+      data: DriverProfile;
+    }>('/driver/kyc', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
+   * Driver: Get comprehensive earnings metrics: GET /api/driver/earnings
+   */
+  async getDriverEarnings(): Promise<{
+    success: boolean;
+    data: DriverEarningsSummary;
+  }> {
+    return request<{
+      success: boolean;
+      data: DriverEarningsSummary;
+    }>('/driver/earnings');
+  },
+
+  /**
+   * Driver: Get payout records: GET /api/driver/payouts
+   */
+  async getDriverPayouts(): Promise<{
+    success: boolean;
+    data: DriverPayout[];
+  }> {
+    return request<{
+      success: boolean;
+      data: DriverPayout[];
+    }>('/driver/payouts');
+  },
+
+  /**
+   * Driver: Request earnings payout: POST /api/driver/payouts
+   */
+  async requestDriverPayout(amount: number): Promise<{
+    success: boolean;
+    message: string;
+    data: DriverPayout;
+  }> {
+    return request<{
+      success: boolean;
+      message: string;
+      data: DriverPayout;
+    }>('/driver/payouts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount }),
+    });
+  },
+
+  /**
    * Cancel an active ride: POST /api/rides/:id/cancel
    */
   async cancelRide(rideId: string, reason?: string): Promise<{ success: boolean; message: string; data: RideWithStops }> {
@@ -577,12 +644,13 @@ export const api = {
    */
   async updateAdminDriverStatus(
     id: string,
-    status: string
+    status: string,
+    rejectionReason?: string
   ): Promise<{ success: boolean; message: string; data: any }> {
     return request(`/admin/drivers/${id}/status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status, rejectionReason }),
     });
   },
 

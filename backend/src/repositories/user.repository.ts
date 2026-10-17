@@ -267,4 +267,8 @@ export const userRepository = {
   clearMemoryStore(): void {
     memoryUsers.clear();
   },
+
+  getAllMemoryUsers(): User[] {
+    return Array.from(memoryUsers.values());
+  },
 };

@@ -126,11 +126,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const email = customEmail || 'rider@example.ridenova.com';
     const normalizedEmail = email.toLowerCase().trim();
     const clerkId = `user_email_${normalizedEmail.replace(/[^a-zA-Z0-9]/g, '_')}`;
-    const name = customName || email.split('@')[0];
+    const isDreambattle =
+      normalizedEmail === 'projectwork3155@gmail.com' ||
+      normalizedEmail === 'dreambattle@3155' ||
+      normalizedEmail.includes('dreambattle');
+
+    const name =
+      customName ||
+      (isDreambattle ? 'Dreambattle' : email.split('@')[0]);
 
     const assignedRole: UserRole =
-      normalizedEmail === 'dreambattle@3155' || normalizedEmail.includes('admin')
+      isDreambattle || normalizedEmail.includes('admin')
         ? 'admin'
+        : normalizedEmail === 'dr.gaming342@gmail.com' || role === 'driver'
+        ? 'driver'
         : role || 'rider';
 
     // Create deterministic dev token accepted by requireAuth

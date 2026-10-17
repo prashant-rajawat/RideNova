@@ -293,7 +293,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({ onNavigate }) =>
 
   return (
     <DashboardLayout
-      role="RIDER"
+      role="CUSTOMER"
       navItems={navItems}
       activeTab={activeTab}
       setActiveTab={(tab) => setActiveTab(tab as typeof activeTab)}

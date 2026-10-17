@@ -42,7 +42,7 @@ router.get('/drivers', async (_req: Request, res: Response, next: NextFunction) 
 router.patch('/drivers/:id/status', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, rejectionReason } = req.body;
     if (!status || !['pending', 'approved', 'suspended', 'active'].includes(status)) {
       res.status(400).json({
         success: false,
@@ -51,7 +51,7 @@ router.patch('/drivers/:id/status', async (req: Request, res: Response, next: Ne
       return;
     }
 
-    const updated = await extendedRepository.updateDriverStatusByAdmin(id, status);
+    const updated = await extendedRepository.updateDriverStatusByAdmin(id, status, rejectionReason);
     res.status(200).json({ success: true, message: `Driver status changed to '${status}'`, data: updated });
   } catch (err) {
     next(err);

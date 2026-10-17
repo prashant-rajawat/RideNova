@@ -11,7 +11,7 @@ interface NavItem {
 }
 
 interface DashboardLayoutProps {
-  role: 'RIDER' | 'DRIVER' | 'ADMIN';
+  role: 'CUSTOMER' | 'DRIVER' | 'ADMIN' | 'RIDER' | string;
   navItems: NavItem[];
   activeTab: string;
   setActiveTab: (tab: string) => void;
@@ -29,6 +29,13 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   logout,
   children,
 }) => {
+  const canonicalRole =
+    role.toUpperCase() === 'RIDER' || role.toUpperCase() === 'CUSTOMER'
+      ? 'CUSTOMER'
+      : role.toUpperCase() === 'ADMINISTRATOR' || role.toUpperCase() === 'ADMIN'
+      ? 'ADMIN'
+      : 'DRIVER';
+
   return (
     <div className="min-h-[85vh] flex flex-col md:flex-row gap-6 p-4 md:p-8 max-w-7xl mx-auto w-full">
       <aside className="w-full md:w-64 shrink-0 rounded-xl border border-brand-border bg-white p-4 flex flex-col justify-between shadow-sm">
@@ -40,7 +47,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
             </div>
             <div className="mt-3 flex items-center justify-between">
               <span className="text-xs text-brand-muted">Access Tier</span>
-              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-brand-secondary text-brand-primary border border-brand-primary/30 tracking-wider">{role}</span>
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-brand-secondary text-brand-primary border border-brand-primary/30 tracking-wider">{canonicalRole}</span>
             </div>
           </div>
 

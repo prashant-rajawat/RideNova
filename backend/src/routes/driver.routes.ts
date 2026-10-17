@@ -8,9 +8,10 @@ const router = Router();
 // Driver role enforced across all driver routes
 router.use(requireAuth, requireRole('driver'));
 
-// Profile & Vehicle
+// Profile, KYC & Vehicle
 router.get('/me', driverController.getProfile);
 router.patch('/profile', driverController.updateProfile);
+router.post('/kyc', driverController.updateKyc);
 router.get('/vehicle', driverController.getVehicle);
 router.post('/vehicle', driverController.updateVehicle);
 router.put('/vehicle', driverController.updateVehicle);
@@ -27,7 +28,10 @@ router.post('/rides/:id/accept', driverController.acceptRide);
 router.get('/active-ride', driverController.getActiveRide);
 router.patch('/rides/:id/status', driverController.updateRideStatus);
 
-// History
+// History, Earnings & Payouts
 router.get('/history', driverController.getHistory);
+router.get('/earnings', driverController.getEarnings);
+router.get('/payouts', driverController.getPayouts);
+router.post('/payouts', driverController.requestPayout);
 
 export default router;

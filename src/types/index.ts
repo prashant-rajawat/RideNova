@@ -159,6 +159,16 @@ export interface RidesListApiResponse {
   count: number;
 }
 
+export type KycStatus =
+  | 'draft'
+  | 'incomplete'
+  | 'submitted'
+  | 'under_review'
+  | 'action_required'
+  | 'approved'
+  | 'rejected'
+  | 'suspended';
+
 export interface Vehicle {
   id: string;
   driver_id: string;
@@ -168,6 +178,12 @@ export interface Vehicle {
   color: string;
   registration_number: string;
   year: number;
+  seating_capacity?: number;
+  insurance_policy_number?: string | null;
+  insurance_expiry?: string | null;
+  rc_document_url?: string | null;
+  insurance_document_url?: string | null;
+  permit_document_url?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -180,14 +196,99 @@ export interface DriverProfile {
   phone: string | null;
   licenseNumber: string;
   status: DriverStatus;
+  kycStatus: KycStatus;
   isOnline: boolean;
   currentLatitude: number | null;
   currentLongitude: number | null;
   rating: number;
   totalRides: number;
+  dob?: string | null;
+  address?: string | null;
+  licenseState?: string | null;
+  licenseExpiry?: string | null;
+  licenseFrontUrl?: string | null;
+  licenseBackUrl?: string | null;
+  idType?: string | null;
+  idNumberMasked?: string | null;
+  idDocumentUrl?: string | null;
+  bankAccountName?: string | null;
+  bankAccountNumberMasked?: string | null;
+  bankIfsc?: string | null;
+  bankStatus?: string | null;
+  kycSubmittedAt?: string | null;
+  rejectionReason?: string | null;
   vehicle: Vehicle | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface DriverKycPayload {
+  // Step 1: Personal
+  fullName?: string;
+  phone?: string;
+  dob?: string;
+  address?: string;
+  profilePhotoUrl?: string;
+
+  // Step 2: Driving Licence
+  licenseNumber?: string;
+  licenseState?: string;
+  licenseExpiry?: string;
+  licenseFrontUrl?: string;
+  licenseBackUrl?: string;
+
+  // Step 3: Vehicle
+  vehicleMake?: string;
+  vehicleModel?: string;
+  vehicleYear?: number;
+  vehicleColor?: string;
+  registrationNumber?: string;
+  vehicleType?: VehicleType;
+  seatingCapacity?: number;
+  insurancePolicyNumber?: string;
+  insuranceExpiry?: string;
+  rcDocumentUrl?: string;
+  insuranceDocumentUrl?: string;
+  permitDocumentUrl?: string;
+
+  // Step 4: Identity and Bank
+  idType?: string;
+  idNumber?: string;
+  idDocumentUrl?: string;
+  bankAccountName?: string;
+  bankAccountNumber?: string;
+  bankIfsc?: string;
+
+  // Step 5: Submit action
+  submitForReview?: boolean;
+}
+
+export interface DriverPayout {
+  id: string;
+  driver_id: string;
+  amount: number;
+  currency: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  bank_account_masked?: string | null;
+  reference_id?: string | null;
+  created_at: string;
+}
+
+export interface DriverEarningsSummary {
+  todayEarnings: number;
+  weekEarnings: number;
+  monthEarnings: number;
+  totalEarnings: number;
+  completedTrips: number;
+  totalGross: number;
+  totalCommission: number;
+  acceptanceRate: number;
+  rating: number;
+  ratingCount: number;
+  onlineHours: number;
+  availableBalance: number;
+  pendingSettlement: number;
+  paidBalance: number;
 }
 
 export interface AvailableRideSummary {

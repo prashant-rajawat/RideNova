@@ -1,4 +1,5 @@
 import { query, isDatabaseConfigured } from '../db/index.ts';
+import { driverRepository } from './driver.repository.ts';
 import {
   Payment,
   DriverEarnings,
@@ -500,17 +501,22 @@ export const extendedRepository = {
         logger.error('Error fetching notifications', { error: (err as Error).message });
       }
     }
-    return memoryNotifications.get(userId) || [
-      {
-        id: 'notif_welcome',
-        user_id: userId,
-        type: 'SYSTEM',
-        title: 'Welcome to RideNova!',
-        message: 'Your account is fully verified. Book a ride anytime with verified drivers.',
-        is_read: false,
-        created_at: new Date().toISOString(),
-      },
-    ];
+    let list = memoryNotifications.get(userId);
+    if (!list) {
+      list = [
+        {
+          id: 'notif_welcome_' + userId,
+          user_id: userId,
+          type: 'SYSTEM',
+          title: 'Welcome to RideNova!',
+          message: 'Your account is fully verified. Book a ride anytime with verified drivers.',
+          is_read: false,
+          created_at: new Date().toISOString(),
+        },
+      ];
+      memoryNotifications.set(userId, list);
+    }
+    return list;
   },
 
   async markNotificationRead(id: string, userId: string): Promise<boolean> {
@@ -644,21 +650,22 @@ export const extendedRepository = {
     }
 
     return {
-      totalUsers: 14,
-      totalRiders: 10,
-      totalDrivers: 3,
-      activeDrivers: 2,
-      totalRides: 8,
-      completedRides: 5,
-      activeRides: 2,
-      totalRevenue: 2450.0,
-      platformFeeTotal: 367.5,
-      openTickets: 1,
+      totalUsers: 0,
+      totalRiders: 0,
+      totalDrivers: 0,
+      activeDrivers: 0,
+      totalRides: 0,
+      completedRides: 0,
+      activeRides: 0,
+      totalRevenue: 0,
+      platformFeeTotal: 0,
+      openTickets: 0,
       recentRides: [],
     };
   },
 
   async getAllDriversForAdmin(): Promise<any[]> {
+    let dbDrivers: any[] = [];
     if (isDatabaseConfigured()) {
       try {
         const res = await query(
@@ -669,30 +676,60 @@ export const extendedRepository = {
            LEFT JOIN vehicles v ON v.driver_id = d.id
            ORDER BY d.created_at DESC`
         );
-        return res.rows;
+        dbDrivers = res.rows;
       } catch (err) {
         logger.error('Error fetching admin drivers', { error: (err as Error).message });
       }
     }
-    return [];
-  },
 
-  async updateDriverStatusByAdmin(driverId: string, status: string): Promise<any> {
-    if (isDatabaseConfigured()) {
-      try {
-        const res = await query(
-          `UPDATE drivers SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
-          [status, driverId]
-        );
-        return res.rows[0] || null;
-      } catch (err) {
-        logger.error('Error updating driver status', { error: (err as Error).message });
+    const { userRepository } = await import('./user.repository.ts');
+    const { driverRepository } = await import('./driver.repository.ts');
+    const memoryDrivers = driverRepository.getAllMemoryDrivers ? driverRepository.getAllMemoryDrivers() : [];
+    const memoryUsers = userRepository.getAllMemoryUsers ? userRepository.getAllMemoryUsers() : [];
+    const memoryVehicles = driverRepository.getAllMemoryVehicles ? driverRepository.getAllMemoryVehicles() : new Map();
+
+    const memMapped = memoryDrivers.map((d) => {
+      const u = memoryUsers.find((user) => user.id === d.user_id) || { name: 'Driver Partner', email: 'driver@ridenova.com', phone: null };
+      const v = memoryVehicles.get(d.id) || null;
+      return {
+        ...d,
+        name: u.name,
+        email: u.email,
+        phone: u.phone,
+        make: v?.make || null,
+        model: v?.model || null,
+        color: v?.color || null,
+        registration_number: v?.registration_number || null,
+        vehicle_type: v?.vehicle_type || null,
+      };
+    });
+
+    const map = new Map();
+    for (const d of [...dbDrivers, ...memMapped]) {
+      if (d && d.id) {
+        map.set(d.id, d);
       }
     }
-    return null;
+    return Array.from(map.values());
+  },
+
+  async updateDriverStatusByAdmin(
+    driverId: string,
+    status: string,
+    rejectionReason?: string
+  ): Promise<any> {
+    const kycStatus = status === 'approved' ? 'approved' : status === 'suspended' ? 'suspended' : 'rejected';
+    const updated = await driverRepository.updateApprovalStatus(
+      driverId,
+      status as any,
+      kycStatus as any,
+      rejectionReason
+    );
+    return updated;
   },
 
   async getAllRidersForAdmin(): Promise<any[]> {
+    let dbRiders: any[] = [];
     if (isDatabaseConfigured()) {
       try {
         const res = await query(
@@ -704,11 +741,25 @@ export const extendedRepository = {
            GROUP BY u.id, u.name, u.email, u.phone, u.role, u.created_at
            ORDER BY u.created_at DESC`
         );
-        return res.rows;
+        dbRiders = res.rows;
       } catch (err) {
         logger.error('Error fetching riders for admin', { error: (err as Error).message });
       }
     }
-    return [];
+
+    const { userRepository } = await import('./user.repository.ts');
+    const memoryUsers = userRepository.getAllMemoryUsers ? userRepository.getAllMemoryUsers() : [];
+    const memRiders = memoryUsers.filter((u) => u.role === 'rider').map((u) => ({
+      ...u,
+      total_rides: 0,
+    }));
+
+    const map = new Map();
+    for (const r of [...dbRiders, ...memRiders]) {
+      if (r && r.id) {
+        map.set(r.id, r);
+      }
+    }
+    return Array.from(map.values());
   },
 };

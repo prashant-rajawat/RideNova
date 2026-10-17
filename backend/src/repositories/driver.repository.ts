@@ -1,10 +1,11 @@
 import { query, isDatabaseConfigured } from '../db/index.ts';
-import { Driver, Vehicle, DriverStatus, VehicleType } from '../types/index.ts';
+import { Driver, Vehicle, DriverStatus, VehicleType, KycStatus, DriverPayout } from '../types/index.ts';
 import { logger } from '../utils/logger.ts';
 
 // In-memory fallback stores
 const memoryDrivers = new Map<string, Driver>();
 const memoryVehicles = new Map<string, Vehicle>();
+const memoryPayouts = new Map<string, DriverPayout[]>();
 
 export interface DriverWithVehicle extends Driver {
   vehicle?: Vehicle | null;
@@ -109,7 +110,7 @@ export const driverRepository = {
   /**
    * Find or create driver profile for a verified driver user
    */
-  async findOrCreate(userId: string, defaultLicense?: string): Promise<DriverWithVehicle> {
+  async findOrCreate(userId: string, defaultLicense?: string, initialStatus: DriverStatus = 'pending'): Promise<DriverWithVehicle> {
     const existing = await this.findByUserId(userId);
     if (existing) {
       return existing;
@@ -120,10 +121,10 @@ export const driverRepository = {
     if (isDatabaseConfigured()) {
       try {
         const insertRes = await query<Driver>(
-          `INSERT INTO drivers (user_id, license_number, status, is_online, rating, total_rides)
-           VALUES ($1, $2, 'approved', FALSE, 5.00, 0)
+          `INSERT INTO drivers (user_id, license_number, status, kyc_status, is_online, rating, total_rides)
+           VALUES ($1, $2, $3, $4, FALSE, 5.00, 0)
            RETURNING *`,
-          [userId, license]
+          [userId, license, initialStatus, initialStatus === 'approved' ? 'approved' : 'draft']
         );
         const newDriver = insertRes.rows[0];
         return {
@@ -147,10 +148,11 @@ export const driverRepository = {
       user_id: userId,
       license_number: license,
       vehicle_id: null,
-      status: 'approved',
+      status: initialStatus,
+      kyc_status: initialStatus === 'approved' ? 'approved' : 'draft',
       is_online: false,
-      current_latitude: 23.2156,
-      current_longitude: 72.6369,
+      current_latitude: 28.6139,
+      current_longitude: 77.2090,
       rating: 5.0,
       total_rides: 0,
       created_at: now,
@@ -162,6 +164,43 @@ export const driverRepository = {
       ...newDriver,
       vehicle: null,
     };
+  },
+
+  /**
+   * Update driver status (e.g. approved, pending, suspended)
+   */
+  async updateStatus(
+    driverId: string,
+    status: DriverStatus
+  ): Promise<DriverWithVehicle | null> {
+    if (isDatabaseConfigured()) {
+      try {
+        await query(
+          `UPDATE drivers
+           SET status = $1,
+               kyc_status = $2,
+               updated_at = NOW()
+           WHERE id = $3`,
+          [status, status === 'approved' ? 'approved' : 'draft', driverId]
+        );
+        return this.findById(driverId);
+      } catch (error) {
+        logger.error('Error updating driver status', {
+          error: (error as Error).message,
+          driverId,
+          status,
+        });
+        throw error;
+      }
+    }
+
+    const driver = memoryDrivers.get(driverId);
+    if (!driver) return null;
+    driver.status = status;
+    driver.kyc_status = status === 'approved' ? 'approved' : 'draft';
+    driver.updated_at = new Date().toISOString();
+    memoryDrivers.set(driverId, driver);
+    return this.findById(driverId);
   },
 
   /**
@@ -392,10 +431,248 @@ export const driverRepository = {
   },
 
   /**
+   * Update Driver KYC details across steps 1-5
+   */
+  async updateKyc(
+    driverId: string,
+    data: {
+      dob?: string;
+      address?: string;
+      licenseNumber?: string;
+      licenseState?: string;
+      licenseExpiry?: string;
+      licenseFrontUrl?: string;
+      licenseBackUrl?: string;
+      idType?: string;
+      idNumberMasked?: string;
+      idDocumentUrl?: string;
+      bankAccountName?: string;
+      bankAccountNumberMasked?: string;
+      bankIfsc?: string;
+      bankStatus?: string;
+      kycStatus?: KycStatus;
+      kycSubmittedAt?: string;
+    }
+  ): Promise<DriverWithVehicle | null> {
+    if (isDatabaseConfigured()) {
+      try {
+        const setClauses: string[] = ['updated_at = NOW()'];
+        const values: unknown[] = [];
+        let idx = 1;
+
+        if (data.dob !== undefined) {
+          setClauses.push(`dob = $${idx++}`);
+          values.push(data.dob);
+        }
+        if (data.address !== undefined) {
+          setClauses.push(`address = $${idx++}`);
+          values.push(data.address);
+        }
+        if (data.licenseNumber !== undefined) {
+          setClauses.push(`license_number = $${idx++}`);
+          values.push(data.licenseNumber);
+        }
+        if (data.licenseState !== undefined) {
+          setClauses.push(`license_state = $${idx++}`);
+          values.push(data.licenseState);
+        }
+        if (data.licenseExpiry !== undefined) {
+          setClauses.push(`license_expiry = $${idx++}`);
+          values.push(data.licenseExpiry);
+        }
+        if (data.licenseFrontUrl !== undefined) {
+          setClauses.push(`license_front_url = $${idx++}`);
+          values.push(data.licenseFrontUrl);
+        }
+        if (data.licenseBackUrl !== undefined) {
+          setClauses.push(`license_back_url = $${idx++}`);
+          values.push(data.licenseBackUrl);
+        }
+        if (data.idType !== undefined) {
+          setClauses.push(`id_type = $${idx++}`);
+          values.push(data.idType);
+        }
+        if (data.idNumberMasked !== undefined) {
+          setClauses.push(`id_number_masked = $${idx++}`);
+          values.push(data.idNumberMasked);
+        }
+        if (data.idDocumentUrl !== undefined) {
+          setClauses.push(`id_document_url = $${idx++}`);
+          values.push(data.idDocumentUrl);
+        }
+        if (data.bankAccountName !== undefined) {
+          setClauses.push(`bank_account_name = $${idx++}`);
+          values.push(data.bankAccountName);
+        }
+        if (data.bankAccountNumberMasked !== undefined) {
+          setClauses.push(`bank_account_number_masked = $${idx++}`);
+          values.push(data.bankAccountNumberMasked);
+        }
+        if (data.bankIfsc !== undefined) {
+          setClauses.push(`bank_ifsc = $${idx++}`);
+          values.push(data.bankIfsc);
+        }
+        if (data.bankStatus !== undefined) {
+          setClauses.push(`bank_status = $${idx++}`);
+          values.push(data.bankStatus);
+        }
+        if (data.kycStatus !== undefined) {
+          setClauses.push(`kyc_status = $${idx++}`);
+          values.push(data.kycStatus);
+        }
+        if (data.kycSubmittedAt !== undefined) {
+          setClauses.push(`kyc_submitted_at = $${idx++}`);
+          values.push(data.kycSubmittedAt);
+        }
+
+        values.push(driverId);
+        await query(
+          `UPDATE drivers SET ${setClauses.join(', ')} WHERE id = $${idx}`,
+          values
+        );
+        return this.findById(driverId);
+      } catch (error) {
+        logger.error('Error updating driver KYC in DB', { error: (error as Error).message, driverId });
+        throw error;
+      }
+    }
+
+    // Memory fallback
+    const driver = memoryDrivers.get(driverId);
+    if (!driver) return null;
+
+    if (data.dob !== undefined) driver.dob = data.dob;
+    if (data.address !== undefined) driver.address = data.address;
+    if (data.licenseNumber !== undefined) driver.license_number = data.licenseNumber;
+    if (data.licenseState !== undefined) driver.license_state = data.licenseState;
+    if (data.licenseExpiry !== undefined) driver.license_expiry = data.licenseExpiry;
+    if (data.licenseFrontUrl !== undefined) driver.license_front_url = data.licenseFrontUrl;
+    if (data.licenseBackUrl !== undefined) driver.license_back_url = data.licenseBackUrl;
+    if (data.idType !== undefined) driver.id_type = data.idType;
+    if (data.idNumberMasked !== undefined) driver.id_number_masked = data.idNumberMasked;
+    if (data.idDocumentUrl !== undefined) driver.id_document_url = data.idDocumentUrl;
+    if (data.bankAccountName !== undefined) driver.bank_account_name = data.bankAccountName;
+    if (data.bankAccountNumberMasked !== undefined) driver.bank_account_number_masked = data.bankAccountNumberMasked;
+    if (data.bankIfsc !== undefined) driver.bank_ifsc = data.bankIfsc;
+    if (data.bankStatus !== undefined) driver.bank_status = data.bankStatus;
+    if (data.kycStatus !== undefined) driver.kyc_status = data.kycStatus;
+    if (data.kycSubmittedAt !== undefined) driver.kyc_submitted_at = data.kycSubmittedAt;
+    driver.updated_at = new Date().toISOString();
+
+    memoryDrivers.set(driverId, driver);
+    return this.findById(driverId);
+  },
+
+  /**
+   * Admin Approval / Rejection / Suspension
+   */
+  async updateApprovalStatus(
+    driverId: string,
+    status: DriverStatus,
+    kycStatus: KycStatus,
+    rejectionReason?: string
+  ): Promise<DriverWithVehicle | null> {
+    if (isDatabaseConfigured()) {
+      try {
+        await query(
+          `UPDATE drivers
+           SET status = $1, kyc_status = $2, rejection_reason = $3, updated_at = NOW()
+           WHERE id = $4`,
+          [status, kycStatus, rejectionReason || null, driverId]
+        );
+        return this.findById(driverId);
+      } catch (error) {
+        logger.error('Error updating driver approval in DB', { error: (error as Error).message, driverId });
+        throw error;
+      }
+    }
+
+    const driver = memoryDrivers.get(driverId);
+    if (!driver) return null;
+
+    driver.status = status;
+    driver.kyc_status = kycStatus;
+    driver.rejection_reason = rejectionReason || null;
+    driver.updated_at = new Date().toISOString();
+    memoryDrivers.set(driverId, driver);
+    return this.findById(driverId);
+  },
+
+  /**
+   * Get driver payouts list
+   */
+  async getPayouts(driverId: string): Promise<DriverPayout[]> {
+    if (isDatabaseConfigured()) {
+      try {
+        const res = await query<DriverPayout>(
+          `SELECT * FROM driver_payouts WHERE driver_id = $1 ORDER BY created_at DESC`,
+          [driverId]
+        );
+        return res.rows;
+      } catch (error) {
+        logger.error('Error fetching driver payouts from DB', { error: (error as Error).message, driverId });
+      }
+    }
+
+    return memoryPayouts.get(driverId) || [];
+  },
+
+  /**
+   * Create driver payout request
+   */
+  async createPayout(
+    driverId: string,
+    amount: number,
+    bankAccountMasked?: string
+  ): Promise<DriverPayout> {
+    const referenceId = `PO-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+
+    if (isDatabaseConfigured()) {
+      try {
+        const res = await query<DriverPayout>(
+          `INSERT INTO driver_payouts (driver_id, amount, currency, status, bank_account_masked, reference_id)
+           VALUES ($1, $2, 'INR', 'completed', $3, $4)
+           RETURNING *`,
+          [driverId, amount, bankAccountMasked || 'XXXX-XXXX', referenceId]
+        );
+        return res.rows[0];
+      } catch (error) {
+        logger.error('Error creating driver payout in DB', { error: (error as Error).message, driverId });
+      }
+    }
+
+    const payout: DriverPayout = {
+      id: `payout_${Date.now()}`,
+      driver_id: driverId,
+      amount,
+      currency: 'INR',
+      status: 'completed',
+      bank_account_masked: bankAccountMasked || 'XXXX-XXXX',
+      reference_id: referenceId,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    const list = memoryPayouts.get(driverId) || [];
+    list.unshift(payout);
+    memoryPayouts.set(driverId, list);
+    return payout;
+  },
+
+  /**
    * Reset driver memory stores
    */
   clearMemoryStore(): void {
     memoryDrivers.clear();
     memoryVehicles.clear();
+    memoryPayouts.clear();
+  },
+
+  getAllMemoryDrivers(): Driver[] {
+    return Array.from(memoryDrivers.values());
+  },
+
+  getAllMemoryVehicles(): Map<string, Vehicle> {
+    return memoryVehicles;
   },
 };

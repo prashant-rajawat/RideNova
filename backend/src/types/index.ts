@@ -18,6 +18,15 @@ export interface User {
 }
 
 export type DriverStatus = 'pending' | 'approved' | 'suspended' | 'active';
+export type KycStatus =
+  | 'draft'
+  | 'incomplete'
+  | 'submitted'
+  | 'under_review'
+  | 'action_required'
+  | 'approved'
+  | 'rejected'
+  | 'suspended';
 
 export interface Driver {
   id: string;
@@ -25,11 +34,27 @@ export interface Driver {
   license_number: string;
   vehicle_id?: string | null;
   status: DriverStatus;
+  kyc_status: KycStatus;
   is_online: boolean;
   current_latitude?: number | null;
   current_longitude?: number | null;
   rating: number;
   total_rides: number;
+  dob?: string | null;
+  address?: string | null;
+  license_state?: string | null;
+  license_expiry?: string | null;
+  license_front_url?: string | null;
+  license_back_url?: string | null;
+  id_type?: string | null;
+  id_number_masked?: string | null;
+  id_document_url?: string | null;
+  bank_account_name?: string | null;
+  bank_account_number_masked?: string | null;
+  bank_ifsc?: string | null;
+  bank_status?: string | null;
+  kyc_submitted_at?: string | null;
+  rejection_reason?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -45,8 +70,26 @@ export interface Vehicle {
   color: string;
   registration_number: string;
   year: number;
+  seating_capacity?: number;
+  insurance_policy_number?: string | null;
+  insurance_expiry?: string | null;
+  rc_document_url?: string | null;
+  insurance_document_url?: string | null;
+  permit_document_url?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface DriverPayout {
+  id: string;
+  driver_id: string;
+  amount: number;
+  currency: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  bank_account_masked?: string | null;
+  reference_id?: string | null;
+  created_at: string;
+  updated_at?: string;
 }
 
 export type RideStatus =

@@ -81,12 +81,16 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
             clerkUser.username ||
             'RideNova User';
 
+          const clerkRole = (clerkUser.publicMetadata?.role ||
+            clerkUser.unsafeMetadata?.role) as any;
+
           identity = {
             clerkUserId: verifiedClerkUserId,
             email: primaryEmail,
             name: fullName,
             profileImageUrl: clerkUser.imageUrl,
             phone: clerkUser.phoneNumbers[0]?.phoneNumber || null,
+            intendedRole: clerkRole,
           };
         } catch (fetchErr) {
           logger.warn('Failed to retrieve full profile from Clerk API, using token claims', {
@@ -127,6 +131,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
         email,
         name,
         profileImageUrl: null,
+        intendedRole: roleHint as any,
       };
     } else if (req.headers['x-test-clerk-user-id']) {
       verifiedClerkUserId = req.headers['x-test-clerk-user-id'] as string;

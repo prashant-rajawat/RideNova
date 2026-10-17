@@ -33,9 +33,11 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onNavigate }) => {
     setLoading(true);
     try {
       const backendRole: UserRole = selectedRole === 'driver' ? 'driver' : 'rider';
-      await devSimulateLogin(backendRole, name, email);
+      const loggedInUser = await devSimulateLogin(backendRole, name, email);
 
-      if (backendRole === 'driver') {
+      if (loggedInUser.role === 'admin') {
+        onNavigate('admin');
+      } else if (loggedInUser.role === 'driver') {
         onNavigate('driver');
       } else {
         onNavigate('rider');

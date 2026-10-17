@@ -9,6 +9,7 @@ export interface ClerkUserIdentity {
   name: string;
   profileImageUrl?: string | null;
   phone?: string | null;
+  intendedRole?: UserRole;
 }
 
 export interface SanitizedUser {
@@ -40,18 +41,49 @@ export function sanitizeUser(user: User): SanitizedUser {
 export const userService = {
   /**
    * Synchronize verified Clerk identity with application database.
-   * If user does not exist, creates with SAFE DEFAULT ROLE = 'rider'.
-   * If user exists, preserves existing role and updates safe profile metadata if changed.
+   * If user does not exist, creates with verified role:
+   * - 'admin' for admin emails
+   * - 'driver' for driver registrations or dr.gaming342@gmail.com
+   * - 'rider' for customer / rider accounts
+   * If user exists, preserves existing verified role without downgrading.
    */
   async syncClerkUser(identity: ClerkUserIdentity): Promise<User> {
     if (!identity.clerkUserId) {
       throw new Error('Missing Clerk User ID in sync payload');
     }
 
+    const normalizedEmail = identity.email ? identity.email.toLowerCase().trim() : '';
     const existing = await userRepository.findByClerkId(identity.clerkUserId);
 
     if (existing) {
-      // User exists. Do NOT alter role. Update profile info if changed.
+      // Special check: ensure Dreambattle (projectwork3155@gmail.com / dreambattle@3155) has canonical ADMIN role
+      const isDreambattle =
+        normalizedEmail === 'projectwork3155@gmail.com' ||
+        normalizedEmail === 'dreambattle@3155' ||
+        normalizedEmail.includes('dreambattle');
+
+      if (isDreambattle && existing.role !== 'admin') {
+        const upgraded = await userRepository.updateRole(existing.id, 'admin');
+        logger.info('Authoritatively promoted Dreambattle account to ADMIN role in database', {
+          id: existing.id,
+          email: existing.email,
+        });
+        return upgraded || existing;
+      }
+
+      // Special check: ensure dr.gaming342@gmail.com has DRIVER role
+      if (normalizedEmail === 'dr.gaming342@gmail.com' && existing.role !== 'driver') {
+        const upgraded = await userRepository.updateRole(existing.id, 'driver');
+        await driverRepository.findOrCreate(existing.id);
+        return upgraded || existing;
+      }
+
+      // If user is a driver, ensure driver record exists in drivers table
+      if (existing.role === 'driver') {
+        await driverRepository.findOrCreate(existing.id);
+      }
+
+      // User exists. Do NOT downgrade or alter role. Update profile info if changed.
       const hasNameChanged = identity.name && identity.name.trim() !== existing.name;
       const hasImageChanged =
         identity.profileImageUrl && identity.profileImageUrl !== existing.profile_image_url;
@@ -67,12 +99,23 @@ export const userService = {
       return existing;
     }
 
-    // New User Registration: Assign safe default role 'rider' (or 'admin' if email matches admin whitelist)
-    const normalizedEmail = identity.email ? identity.email.toLowerCase().trim() : '';
-    const assignedDefaultRole: UserRole =
-      normalizedEmail === 'dreambattle@3155' || normalizedEmail.includes('admin') ? 'admin' : 'rider';
+    // New User Registration:
+    // Whitelisted admin emails get 'admin'
+    // Driver registration or dr.gaming342@gmail.com get 'driver'
+    // Default customers get 'rider'
+    let assignedDefaultRole: UserRole = 'rider';
+    if (
+      normalizedEmail === 'projectwork3155@gmail.com' ||
+      normalizedEmail === 'dreambattle@3155' ||
+      normalizedEmail.includes('dreambattle') ||
+      normalizedEmail.includes('admin')
+    ) {
+      assignedDefaultRole = 'admin';
+    } else if (normalizedEmail === 'dr.gaming342@gmail.com' || identity.intendedRole === 'driver') {
+      assignedDefaultRole = 'driver';
+    }
 
-    logger.info('Auto-syncing new Clerk user into RideNova database', {
+    logger.info('Auto-syncing new user into RideNova database', {
       clerkUserId: identity.clerkUserId,
       email: identity.email,
       assignedDefaultRole,
@@ -86,6 +129,11 @@ export const userService = {
       phone: identity.phone || null,
       profile_image_url: identity.profileImageUrl || null,
     });
+
+    // If driver, initialize corresponding driver record
+    if (assignedDefaultRole === 'driver') {
+      await driverRepository.findOrCreate(newUser.id);
+    }
 
     return newUser;
   },
