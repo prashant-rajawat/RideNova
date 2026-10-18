@@ -47,7 +47,11 @@ export function createExpressApp(): Express {
   app.use('/api', rateLimiter);
 
   // Root endpoint for backend deployment health check
-  app.get('/', (_req, res) => {
+  app.get('/', (req, res, next) => {
+    const accept = req.headers.accept || '';
+    if (accept.includes('text/html')) {
+      return next();
+    }
     res.status(200).json({
       success: true,
       service: 'RideNova API Backend',
