@@ -33,6 +33,9 @@ export function createExpressApp(): Express {
     })
   );
 
+  // Raw body parsing for Stripe webhook signature verification
+  app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
+
   // Body Parsing
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -42,6 +45,34 @@ export function createExpressApp(): Express {
 
   // Rate Limiting
   app.use('/api', rateLimiter);
+
+  // Root endpoint for backend deployment health check
+  app.get('/', (_req, res) => {
+    res.status(200).json({
+      success: true,
+      service: 'RideNova API Backend',
+      version: '1.0.0',
+      status: 'online',
+      endpoints: {
+        health: '/health',
+        apiHealth: '/api/health',
+        apiBase: '/api',
+        stripeWebhook: '/api/payments/webhook',
+      },
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  // Health endpoint for Render / monitoring
+  app.get('/health', (_req, res) => {
+    res.status(200).json({
+      success: true,
+      status: 'healthy',
+      service: 'ridenova-backend',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+    });
+  });
 
   // API Routes
   app.use('/api', apiRouter);

@@ -137,6 +137,14 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({ onNavigate }) =>
 
   useEffect(() => {
     fetchData();
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('payment') === 'success') {
+      showSuccess('Payment completed successfully via Stripe Checkout!');
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (params.get('payment') === 'cancelled') {
+      showError('Stripe Checkout was cancelled. You can retry payment anytime.');
+      window.history.replaceState({}, '', window.location.pathname);
+    }
   }, [fetchData]);
 
   // Find active ride: status is NOT completed and NOT cancelled
@@ -183,26 +191,24 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({ onNavigate }) =>
     }
   };
 
-  // Process Stripe payment
+  // Process Stripe payment via Checkout Session
   const handleExecutePayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!payModalRide) return;
     setActionLoading(true);
     try {
-      const res = await api.payRide(payModalRide.id, {
-        paymentMethod: 'card',
-        stripeToken: `pi_test_${Date.now()}`,
-        promoCode: paymentPromoCode || undefined,
-      });
-
-      if (res.success) {
-        showSuccess('Payment processed successfully via Stripe test mode!');
-        setPayModalRide(null);
-        setPromoDiscount(0);
-        setPaymentPromoCode('');
-        fetchData();
-        // Show receipt
-        setActiveReceipt(res.data.receipt);
+      const res = await api.createCheckoutSession(payModalRide.id, paymentPromoCode || undefined);
+      if (res.success && res.data) {
+        if (res.data.url) {
+          showSuccess('Redirecting to secure Stripe Checkout...');
+          window.location.href = res.data.url;
+        } else {
+          showSuccess('Payment processed successfully via Stripe!');
+          setPayModalRide(null);
+          setPromoDiscount(0);
+          setPaymentPromoCode('');
+          fetchData();
+        }
       }
     } catch (err: any) {
       showError(err.message || 'Payment processing failed.');

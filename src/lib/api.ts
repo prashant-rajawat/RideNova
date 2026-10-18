@@ -675,4 +675,25 @@ export const api = {
   async getAdminRiders(): Promise<{ success: boolean; data: any[]; count: number }> {
     return request<{ success: boolean; data: any[]; count: number }>('/admin/riders');
   },
+
+  /**
+   * Create Stripe Checkout session: POST /api/payments/checkout-session
+   */
+  async createCheckoutSession(
+    rideId: string,
+    promoCode?: string
+  ): Promise<{ success: boolean; message: string; data: { sessionId: string; url: string; simulated?: boolean } }> {
+    return request('/payments/checkout-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rideId, promoCode }),
+    });
+  },
+
+  /**
+   * Get payment status for a ride: GET /api/payments/ride/:rideId
+   */
+  async getPaymentStatus(rideId: string): Promise<{ success: boolean; data: Payment | null }> {
+    return request(`/payments/ride/${rideId}`);
+  },
 };
