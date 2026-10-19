@@ -21,6 +21,34 @@ const memoryReviews = new Map<string, Review>();
 const memoryPromos = new Map<string, PromoCode>();
 const memoryNotifications = new Map<string, Notification[]>();
 const memoryTickets = new Map<string, SupportTicket>();
+let memoryPaymentSettings = {
+  id: 'settings_default',
+  upi_id: 'ridenova@okhdfcbank',
+  upi_qr_url: 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=upi://pay?pa=ridenova@okhdfcbank&pn=RideNova',
+  commission_type: 'percentage' as 'percentage' | 'fixed',
+  commission_value: 15.00,
+  stripe_enabled: true,
+  manual_upi_enabled: true,
+  updated_at: new Date().toISOString(),
+};
+
+let memoryCommissionSettings = {
+  platform_commission_percentage: 15.00,
+  fixed_platform_fee: 0.00,
+  base_fare: 70.00,
+  per_km_charge: 12.00,
+  per_minute_charge: 1.50,
+  waiting_charge_per_min: 2.00,
+  cancellation_fee: 50.00,
+  tax_percentage: 5.00,
+  effective_date: new Date().toISOString(),
+};
+
+let memoryPaymentMethods: any[] = [
+  { id: 'pm_stripe', name: 'Stripe Checkout', description: 'Credit Card, Debit Card, Apple Pay', type: 'provider', is_active: true, display_order: 1 },
+  { id: 'pm_upi', name: 'UPI QR & ID', description: 'Google Pay, PhonePe, Paytm, BHIM', type: 'manual_upi', is_active: true, display_order: 2 },
+  { id: 'pm_bank', name: 'Direct Bank Transfer', description: 'NEFT / RTGS / IMPS to RideNova account', type: 'bank_transfer', is_active: true, display_order: 3 },
+];
 
 // Pre-seed some default promo codes for testing
 const defaultPromos: PromoCode[] = [
@@ -649,18 +677,49 @@ export const extendedRepository = {
       }
     }
 
+    const { rideRepository } = await import('./ride.repository.ts');
+    const allRides = await rideRepository.getAllRides();
+    const { userRepository } = await import('./user.repository.ts');
+    const { driverRepository } = await import('./driver.repository.ts');
+
+    const memUsers = userRepository.getAllMemoryUsers ? userRepository.getAllMemoryUsers() : [];
+    const memDrivers = driverRepository.getAllMemoryDrivers ? driverRepository.getAllMemoryDrivers() : [];
+
+    const totalUsers = memUsers.length;
+    const totalRiders = memUsers.filter((u) => u.role === 'rider').length;
+    const totalDrivers = memDrivers.length;
+    const activeDrivers = memDrivers.filter((d) => d.is_online).length;
+
+    let completedRides = 0;
+    let activeRides = 0;
+    let totalRevenue = 0;
+
+    for (const r of allRides) {
+      if (r.status === 'ride_completed') {
+        completedRides++;
+        totalRevenue += Number(r.final_fare || r.estimated_fare || 0);
+      } else if (['requested', 'accepted', 'driver_arriving', 'driver_arrived', 'ride_started'].includes(r.status)) {
+        activeRides++;
+      }
+    }
+
+    const platformFeeTotal = Number((totalRevenue * 0.15).toFixed(2));
+    const openTickets = Array.from(memoryTickets.values()).filter(
+      (t) => t.status === 'open' || t.status === 'in_progress'
+    ).length;
+
     return {
-      totalUsers: 0,
-      totalRiders: 0,
-      totalDrivers: 0,
-      activeDrivers: 0,
-      totalRides: 0,
-      completedRides: 0,
-      activeRides: 0,
-      totalRevenue: 0,
-      platformFeeTotal: 0,
-      openTickets: 0,
-      recentRides: [],
+      totalUsers,
+      totalRiders,
+      totalDrivers,
+      activeDrivers,
+      totalRides: allRides.length,
+      completedRides,
+      activeRides,
+      totalRevenue,
+      platformFeeTotal,
+      openTickets,
+      recentRides: allRides.slice(0, 8),
     };
   },
 
@@ -734,11 +793,16 @@ export const extendedRepository = {
       try {
         const res = await query(
           `SELECT u.id, u.name, u.email, u.phone, u.role, u.created_at,
+                  upe.legal_name, upe.display_name, upe.city, upe.state, upe.country,
+                  upe.preferred_language, upe.profile_completion_percentage,
                   COUNT(r.id) as total_rides
            FROM users u
            LEFT JOIN rides r ON r.rider_id = u.id
+           LEFT JOIN user_profile_extensions upe ON upe.user_id = u.id
            WHERE u.role = 'rider'
-           GROUP BY u.id, u.name, u.email, u.phone, u.role, u.created_at
+           GROUP BY u.id, u.name, u.email, u.phone, u.role, u.created_at,
+                    upe.legal_name, upe.display_name, upe.city, upe.state, upe.country,
+                    upe.preferred_language, upe.profile_completion_percentage
            ORDER BY u.created_at DESC`
         );
         dbRiders = res.rows;
@@ -748,18 +812,252 @@ export const extendedRepository = {
     }
 
     const { userRepository } = await import('./user.repository.ts');
+    const { profileRepository } = await import('./profile.repository.ts');
     const memoryUsers = userRepository.getAllMemoryUsers ? userRepository.getAllMemoryUsers() : [];
-    const memRiders = memoryUsers.filter((u) => u.role === 'rider').map((u) => ({
-      ...u,
-      total_rides: 0,
-    }));
+    const memRiders = memoryUsers.filter((u) => u.role === 'rider').map((u) => {
+      const ext = profileRepository.getMemoryProfile(u.id);
+      return {
+        ...u,
+        legal_name: ext?.legal_name || null,
+        display_name: ext?.display_name || null,
+        city: ext?.city || null,
+        state: ext?.state || null,
+        country: ext?.country || 'India',
+        preferred_language: ext?.preferred_language || 'English',
+        profile_completion_percentage: ext?.profile_completion_percentage || 0,
+        total_rides: 0,
+      };
+    });
 
     const map = new Map();
     for (const r of [...dbRiders, ...memRiders]) {
       if (r && r.id) {
-        map.set(r.id, r);
+        const ext = profileRepository.getMemoryProfile(r.id);
+        if (ext) {
+          map.set(r.id, {
+            ...r,
+            city: r.city || ext.city,
+            preferred_language: r.preferred_language || ext.preferred_language,
+            profile_completion_percentage: r.profile_completion_percentage || ext.profile_completion_percentage,
+            country: r.country || ext.country,
+            display_name: r.display_name || ext.display_name,
+            legal_name: r.legal_name || ext.legal_name,
+          });
+        } else {
+          map.set(r.id, r);
+        }
       }
     }
     return Array.from(map.values());
+  },
+
+  async getRiderDetailsForAdmin(riderId: string): Promise<any | null> {
+    const { userRepository } = await import('./user.repository.ts');
+    const { profileRepository } = await import('./profile.repository.ts');
+    const { rideRepository } = await import('./ride.repository.ts');
+
+    const user = await userRepository.findById(riderId);
+    if (!user) return null;
+
+    const [extension, emergencyContacts, safetyPrefs, rides] = await Promise.all([
+      profileRepository.getExtension(riderId),
+      profileRepository.getEmergencyContacts(riderId),
+      profileRepository.getSafetyPreferences(riderId),
+      rideRepository.findByRiderId(riderId),
+    ]);
+
+    return {
+      user,
+      extension: extension || profileRepository.getMemoryProfile(riderId),
+      emergencyContacts: emergencyContacts.length > 0 ? emergencyContacts : profileRepository.getMemoryEmergencyContacts(riderId),
+      safetyPrefs: safetyPrefs || profileRepository.getMemorySafetyPreferences(riderId),
+      recentRides: rides || [],
+      totalRides: rides?.length || 0,
+    };
+  },
+
+  async getDriverDetailsForAdmin(driverId: string): Promise<any | null> {
+    const { userRepository } = await import('./user.repository.ts');
+    const { driverRepository } = await import('./driver.repository.ts');
+    const { profileRepository } = await import('./profile.repository.ts');
+    const { rideRepository } = await import('./ride.repository.ts');
+
+    let driver = await driverRepository.findById(driverId);
+    if (!driver) {
+      driver = await driverRepository.findByUserId(driverId);
+    }
+    if (!driver) return null;
+
+    const user = await userRepository.findById(driver.user_id);
+    const [extension, emergencyContacts, safetyPrefs, rides, payouts] = await Promise.all([
+      profileRepository.getExtension(driver.user_id),
+      profileRepository.getEmergencyContacts(driver.user_id),
+      profileRepository.getSafetyPreferences(driver.user_id),
+      rideRepository.findByDriverId(driver.id),
+      driverRepository.getPayouts(driver.id).catch(() => []),
+    ]);
+
+    return {
+      driver,
+      user,
+      vehicle: driver.vehicle,
+      extension: extension || profileRepository.getMemoryProfile(driver.user_id),
+      emergencyContacts: emergencyContacts.length > 0 ? emergencyContacts : profileRepository.getMemoryEmergencyContacts(driver.user_id),
+      safetyPrefs: safetyPrefs || profileRepository.getMemorySafetyPreferences(driver.user_id),
+      recentRides: rides || [],
+      payouts: payouts || [],
+      totalRides: driver.total_rides || rides?.length || 0,
+    };
+  },
+
+  async getPaymentSettings() {
+    if (isDatabaseConfigured()) {
+      try {
+        const res = await query(`SELECT * FROM payment_settings LIMIT 1`);
+        if (res.rows.length > 0) return res.rows[0];
+      } catch (err) {
+        logger.error('Error fetching payment settings', { error: (err as Error).message });
+      }
+    }
+    return memoryPaymentSettings;
+  },
+
+  async updatePaymentSettings(data: {
+    upi_id?: string;
+    upi_qr_url?: string;
+    commission_type?: 'percentage' | 'fixed';
+    commission_value?: number;
+    stripe_enabled?: boolean;
+    manual_upi_enabled?: boolean;
+  }) {
+    if (isDatabaseConfigured()) {
+      try {
+        await query(
+          `UPDATE payment_settings SET 
+            upi_id = COALESCE($1, upi_id), 
+            upi_qr_url = COALESCE($2, upi_qr_url), 
+            commission_type = COALESCE($3, commission_type), 
+            commission_value = COALESCE($4, commission_value), 
+            stripe_enabled = COALESCE($5, stripe_enabled), 
+            manual_upi_enabled = COALESCE($6, manual_upi_enabled), 
+            updated_at = NOW()`,
+          [data.upi_id, data.upi_qr_url, data.commission_type, data.commission_value, data.stripe_enabled, data.manual_upi_enabled]
+        );
+        return this.getPaymentSettings();
+      } catch (err) {
+        logger.error('Error updating payment settings', { error: (err as Error).message });
+      }
+    }
+    memoryPaymentSettings = { ...memoryPaymentSettings, ...data };
+    return memoryPaymentSettings;
+  },
+
+  async submitManualUpiPayment(rideId: string, riderId: string, amount: number, utrNumber: string) {
+    if (isDatabaseConfigured()) {
+      try {
+        const res = await query(
+          `INSERT INTO payments (ride_id, rider_id, amount, currency, payment_method, utr_number, status, verification_status)
+           VALUES ($1, $2, $3, 'INR', 'manual_upi', $4, 'pending', 'pending_verification')
+           RETURNING *`,
+          [rideId, riderId, amount, utrNumber]
+        );
+        return res.rows[0];
+      } catch (err) {
+        logger.error('Error submitting manual UPI payment', { error: (err as Error).message });
+        throw err;
+      }
+    }
+
+    const id = `pay_upi_${Date.now()}`;
+    const payment = {
+      id,
+      ride_id: rideId,
+      rider_id: riderId,
+      amount,
+      currency: 'INR',
+      payment_method: 'manual_upi',
+      utr_number: utrNumber,
+      status: 'pending',
+      verification_status: 'pending_verification',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    return payment;
+  },
+
+  async verifyManualUpiPayment(paymentId: string) {
+    if (isDatabaseConfigured()) {
+      try {
+        const res = await query(
+          `UPDATE payments SET status = 'succeeded', verification_status = 'verified', paid_at = NOW(), updated_at = NOW()
+           WHERE id = $1 RETURNING *`,
+          [paymentId]
+        );
+        const payment = res.rows[0];
+        if (payment && payment.ride_id) {
+          const rideRes = await query(`SELECT driver_id FROM rides WHERE id = $1`, [payment.ride_id]);
+          if (rideRes.rows.length > 0 && rideRes.rows[0].driver_id) {
+            const driverId = rideRes.rows[0].driver_id;
+            const settings = await this.getPaymentSettings();
+            const gross = Number(payment.amount);
+            let commission = 0;
+            if (settings.commission_type === 'fixed') {
+              commission = Number(settings.commission_value);
+            } else {
+              commission = (gross * Number(settings.commission_value)) / 100;
+            }
+            const netDriver = Math.max(0, gross - commission);
+            await query(
+              `INSERT INTO driver_earnings (driver_id, ride_id, gross_amount, platform_fee, driver_amount, currency, status)
+               VALUES ($1, $2, $3, $4, $5, 'INR', 'processed')`,
+              [driverId, payment.ride_id, gross, commission.toFixed(2), netDriver.toFixed(2)]
+            );
+          }
+        }
+        return payment;
+      } catch (err) {
+        logger.error('Error verifying manual UPI payment', { error: (err as Error).message });
+        throw err;
+      }
+    }
+    return null;
+  },
+
+  async getCommissionSettings() {
+    return memoryCommissionSettings;
+  },
+
+  async updateCommissionSettings(data: any) {
+    memoryCommissionSettings = { ...memoryCommissionSettings, ...data, effective_date: new Date().toISOString() };
+    return memoryCommissionSettings;
+  },
+
+  async getPaymentMethods() {
+    return memoryPaymentMethods;
+  },
+
+  async createPaymentMethod(data: any) {
+    const newMethod = {
+      id: `pm_${Date.now()}`,
+      ...data,
+      is_active: data.is_active ?? true,
+      display_order: data.display_order || memoryPaymentMethods.length + 1,
+    };
+    memoryPaymentMethods.push(newMethod);
+    return newMethod;
+  },
+
+  async updatePaymentMethod(id: string, data: any) {
+    memoryPaymentMethods = memoryPaymentMethods.map((m) => (m.id === id ? { ...m, ...data } : m));
+    return memoryPaymentMethods.find((m) => m.id === id);
+  },
+
+  async deletePaymentMethod(id: string) {
+    memoryPaymentMethods = memoryPaymentMethods.filter((m) => m.id !== id);
+    return { success: true };
+  },
+
+  async getAllDriverEarnings() {
+    return Array.from(memoryEarnings.values());
   },
 };

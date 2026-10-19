@@ -8,6 +8,7 @@ import supportRoutes from './support.routes.ts';
 import promoRoutes from './promo.routes.ts';
 import notificationRoutes from './notification.routes.ts';
 import paymentRoutes from './payment.routes.ts';
+import profileRoutes from './profile.routes.ts';
 
 const apiRouter = Router();
 
@@ -37,6 +38,9 @@ apiRouter.use('/notifications', notificationRoutes);
 
 // Mount payment routes under /api/payments
 apiRouter.use('/payments', paymentRoutes);
+
+// Mount profile routes under /api/profile
+apiRouter.use('/profile', profileRoutes);
 
 // Public config route for client-side public API keys (Google Maps Platform browser key)
 apiRouter.get('/config/maps', (_req, res) => {

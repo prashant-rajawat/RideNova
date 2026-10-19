@@ -11,6 +11,7 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "migrate": "tsx backend/src/db/migrate.ts",
+    "seed-rides": "tsx backend/src/scripts/seed_rides.ts",
     "test": "tsx test/foundation.test.ts && tsx test/step2_auth.test.ts && tsx test/step3_booking.test.ts && tsx test/step4_driver.test.ts"
   },
   "dependencies": {

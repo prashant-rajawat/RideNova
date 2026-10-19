@@ -53,6 +53,13 @@ export interface Driver {
   bank_account_number_masked?: string | null;
   bank_ifsc?: string | null;
   bank_status?: string | null;
+  upi_id?: string | null;
+  operating_city?: string | null;
+  preferred_language?: string | null;
+  profile_photo_url?: string | null;
+  auto_accept_rides?: boolean;
+  working_hours_preference?: string | null;
+  quiet_ride_preference?: boolean;
   kyc_submitted_at?: string | null;
   rejection_reason?: string | null;
   created_at: string;
@@ -76,6 +83,8 @@ export interface Vehicle {
   rc_document_url?: string | null;
   insurance_document_url?: string | null;
   permit_document_url?: string | null;
+  puc_expiry?: string | null;
+  puc_document_url?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -242,4 +251,41 @@ export interface DbHealthResponse {
     tableCount?: number;
     verifiedTables?: string[];
   };
+}
+export interface UserProfileExtension {
+  user_id: string;
+  legal_name?: string | null;
+  display_name?: string | null;
+  date_of_birth?: string | null;
+  gender?: string | null;
+  city: string | null;
+  state?: string | null;
+  country?: string | null;
+  postal_code?: string | null;
+  address_line1?: string | null;
+  address_line2?: string | null;
+  landmark?: string | null;
+  alternate_phone: string | null;
+  preferred_language: string;
+  profile_completion_percentage: number;
+  updated_at: string;
+}
+
+export interface EmergencyContact {
+  id: string;
+  user_id: string;
+  name: string;
+  relationship: string;
+  phone_number: string;
+  is_primary: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SafetyPreferences {
+  user_id: string;
+  accessibility_notes: string | null;
+  emergency_notes: string | null;
+  consent_given: boolean;
+  updated_at: string;
 }

@@ -9,8 +9,8 @@ const router = Router();
 // POST /api/rides/route - Authoritative route calculation and fare preview
 router.post('/route', rideController.previewRoute);
 
-// POST /api/rides - Create a new ride request (Rider only)
-router.post('/', requireAuth, requireRole('rider'), rideController.createRide);
+// POST /api/rides - Create a new ride request (Rider or Admin)
+router.post('/', requireAuth, requireRole('rider', 'admin'), rideController.createRide);
 
 // GET /api/rides - Get authenticated rider's rides
 router.get('/', requireAuth, requireRole('rider', 'admin'), rideController.getRides);
@@ -25,10 +25,10 @@ router.get('/:id', requireAuth, requireRole('rider', 'admin'), rideController.ge
 router.post('/:id/cancel', requireAuth, requireRole('rider', 'driver', 'admin'), rideController.cancelRide);
 
 // POST /api/rides/:id/pay - Process payment (Stripe test-mode / Card)
-router.post('/:id/pay', requireAuth, requireRole('rider'), rideController.processPayment);
+router.post('/:id/pay', requireAuth, requireRole('rider', 'admin'), rideController.processPayment);
 
 // POST /api/rides/:id/review - Submit post-ride driver review
-router.post('/:id/review', requireAuth, requireRole('rider'), rideController.submitReview);
+router.post('/:id/review', requireAuth, requireRole('rider', 'admin'), rideController.submitReview);
 
 // GET /api/rides/:id/receipt - Get ride receipt
 router.get('/:id/receipt', requireAuth, requireRole('rider', 'admin'), rideController.getReceipt);

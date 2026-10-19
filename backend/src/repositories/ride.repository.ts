@@ -48,51 +48,168 @@ export interface DriverDisplayInfo {
   } | null;
 }
 
+export interface RiderDisplayInfo {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  profile_image_url?: string | null;
+}
+
+export interface PaymentDisplayInfo {
+  id: string;
+  amount: number;
+  payment_method: string;
+  status: string;
+  stripe_payment_intent_id?: string | null;
+  paid_at?: string | null;
+}
+
 export interface RideWithStops extends Ride {
   stops: RideStop[];
   reference_id?: string;
   driver?: DriverDisplayInfo | null;
+  rider?: RiderDisplayInfo | null;
+  payment?: PaymentDisplayInfo | null;
   scheduled_at?: string | null;
 }
 
 async function enrichRideWithDriver(ride: Ride, stops: RideStop[]): Promise<RideWithStops> {
   const shortRef = `RN-${new Date(ride.created_at).toISOString().slice(0, 10).replace(/-/g, '')}-${ride.id.slice(0, 6).toUpperCase()}`;
   let driverInfo: DriverDisplayInfo | null = null;
+  let riderInfo: RiderDisplayInfo | null = null;
+  let paymentInfo: PaymentDisplayInfo | null = null;
 
-  if (ride.driver_id && isDatabaseConfigured()) {
+  if (isDatabaseConfigured()) {
+    // 1. Enrich Driver
+    if (ride.driver_id) {
+      try {
+        const res = await query<any>(
+          `SELECT d.id, u.name, u.phone, u.profile_image_url, d.rating, d.total_rides,
+                  d.current_latitude, d.current_longitude,
+                  v.make, v.model, v.color, v.registration_number, v.year, v.vehicle_type
+           FROM drivers d
+           JOIN users u ON u.id = d.user_id
+           LEFT JOIN vehicles v ON v.driver_id = d.id
+           WHERE d.id = $1 LIMIT 1`,
+          [ride.driver_id]
+        );
+        if (res.rows.length > 0) {
+          const row = res.rows[0];
+          driverInfo = {
+            id: row.id,
+            name: row.name,
+            phone: row.phone,
+            rating: parseFloat(row.rating || '5.0'),
+            total_rides: parseInt(row.total_rides || '0', 10),
+            profile_image_url: row.profile_image_url,
+            current_latitude: row.current_latitude,
+            current_longitude: row.current_longitude,
+            vehicle: row.make
+              ? {
+                  make: row.make,
+                  model: row.model,
+                  color: row.color,
+                  registration_number: row.registration_number,
+                  year: row.year,
+                  vehicle_type: row.vehicle_type,
+                }
+              : null,
+          };
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // 2. Enrich Rider
+    if (ride.rider_id) {
+      try {
+        const uRes = await query<any>(
+          `SELECT id, name, email, phone, profile_image_url FROM users WHERE id = $1 LIMIT 1`,
+          [ride.rider_id]
+        );
+        if (uRes.rows.length > 0) {
+          const u = uRes.rows[0];
+          riderInfo = {
+            id: u.id,
+            name: u.name,
+            email: u.email,
+            phone: u.phone || null,
+            profile_image_url: u.profile_image_url || null,
+          };
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // 3. Enrich Payment
     try {
-      const res = await query<any>(
-        `SELECT d.id, u.name, u.phone, u.profile_image_url, d.rating, d.total_rides,
-                d.current_latitude, d.current_longitude,
-                v.make, v.model, v.color, v.registration_number, v.year, v.vehicle_type
-         FROM drivers d
-         JOIN users u ON u.id = d.user_id
-         LEFT JOIN vehicles v ON v.driver_id = d.id
-         WHERE d.id = $1 LIMIT 1`,
-        [ride.driver_id]
+      const pRes = await query<any>(
+        `SELECT id, amount, payment_method, status, stripe_payment_intent_id, paid_at FROM payments WHERE ride_id = $1 ORDER BY created_at DESC LIMIT 1`,
+        [ride.id]
       );
-      if (res.rows.length > 0) {
-        const row = res.rows[0];
-        driverInfo = {
-          id: row.id,
-          name: row.name,
-          phone: row.phone,
-          rating: parseFloat(row.rating || '5.0'),
-          total_rides: parseInt(row.total_rides || '0', 10),
-          profile_image_url: row.profile_image_url,
-          current_latitude: row.current_latitude,
-          current_longitude: row.current_longitude,
-          vehicle: row.make
-            ? {
-                make: row.make,
-                model: row.model,
-                color: row.color,
-                registration_number: row.registration_number,
-                year: row.year,
-                vehicle_type: row.vehicle_type,
-              }
-            : null,
+      if (pRes.rows.length > 0) {
+        const p = pRes.rows[0];
+        paymentInfo = {
+          id: p.id,
+          amount: parseFloat(p.amount || '0'),
+          payment_method: p.payment_method,
+          status: p.status,
+          stripe_payment_intent_id: p.stripe_payment_intent_id || null,
+          paid_at: p.paid_at || null,
         };
+      }
+    } catch {
+      // ignore
+    }
+  } else {
+    // Memory Fallback enrichment
+    try {
+      const { userRepository } = await import('./user.repository.ts');
+      const { driverRepository } = await import('./driver.repository.ts');
+
+      // Rider in memory
+      if (ride.rider_id) {
+        const u = await userRepository.findById(ride.rider_id);
+        if (u) {
+          riderInfo = {
+            id: u.id,
+            name: u.name,
+            email: u.email,
+            phone: u.phone || null,
+            profile_image_url: u.profile_image_url || null,
+          };
+        }
+      }
+
+      // Driver in memory
+      if (ride.driver_id) {
+        const d = await driverRepository.findById(ride.driver_id);
+        if (d) {
+          const u = await userRepository.findById(d.user_id);
+          driverInfo = {
+            id: d.id,
+            name: u?.name || 'Driver Partner',
+            phone: u?.phone || null,
+            rating: Number(d.rating || 5.0),
+            total_rides: d.total_rides || 0,
+            profile_image_url: u?.profile_image_url || null,
+            current_latitude: d.current_latitude ?? null,
+            current_longitude: d.current_longitude ?? null,
+            vehicle: d.vehicle
+              ? {
+                  make: d.vehicle.make,
+                  model: d.vehicle.model,
+                  color: d.vehicle.color,
+                  registration_number: d.vehicle.registration_number,
+                  year: d.vehicle.year,
+                  vehicle_type: d.vehicle.vehicle_type,
+                }
+              : null,
+          };
+        }
       }
     } catch {
       // ignore
@@ -101,9 +218,15 @@ async function enrichRideWithDriver(ride: Ride, stops: RideStop[]): Promise<Ride
 
   return {
     ...ride,
+    distance_km: ride.distance_km != null ? Number(ride.distance_km) : 0,
+    estimated_duration_minutes: Number(ride.estimated_duration_minutes) || 0,
+    estimated_fare: Number(ride.estimated_fare) || 0,
+    final_fare: ride.final_fare != null ? Number(ride.final_fare) : null,
     stops,
     reference_id: shortRef,
     driver: driverInfo,
+    rider: riderInfo,
+    payment: paymentInfo,
   };
 }
 
@@ -648,45 +771,268 @@ export const rideRepository = {
   },
 
   /**
-   * Retrieve all rides for Admin console
+   * Retrieve all rides for Admin console with diagnostic logging & enriched details
    */
   async getAllRides(status?: string): Promise<RideWithStops[]> {
+    let dbRides: RideWithStops[] = [];
     if (isDatabaseConfigured()) {
       try {
         let sql = `SELECT * FROM rides`;
         const params: unknown[] = [];
-        if (status) {
+        if (status && status !== 'all') {
           params.push(status);
           sql += ` WHERE status = $1`;
         }
-        sql += ` ORDER BY created_at DESC LIMIT 100`;
+        sql += ` ORDER BY created_at DESC LIMIT 200`;
 
         const res = await query<Ride>(sql, params);
-        const results: RideWithStops[] = [];
-        for (const ride of res.rows) {
-          const stopsRes = await query<RideStop>(
-            `SELECT * FROM ride_stops WHERE ride_id = $1 ORDER BY stop_order ASC`,
-            [ride.id]
-          );
-          results.push(await enrichRideWithDriver(ride, stopsRes.rows));
+        if (res.rows.length > 0) {
+          const rideIds = res.rows.map((r) => r.id);
+          const riderIds = Array.from(new Set(res.rows.map((r) => r.rider_id).filter(Boolean)));
+          const driverIds = Array.from(new Set(res.rows.map((r) => r.driver_id).filter(Boolean)));
+
+          // 1. Batch fetch stops
+          const stopsMap = new Map<string, RideStop[]>();
+          try {
+            const stopsRes = await query<RideStop>(
+              `SELECT * FROM ride_stops WHERE ride_id = ANY($1::uuid[]) ORDER BY stop_order ASC`,
+              [rideIds]
+            );
+            for (const stop of stopsRes.rows) {
+              const list = stopsMap.get(stop.ride_id) || [];
+              list.push(stop);
+              stopsMap.set(stop.ride_id, list);
+            }
+          } catch (stopErr) {
+            logger.warn('Failed batch stops query in getAllRides', { error: (stopErr as Error).message });
+          }
+
+          // 2. Batch fetch riders
+          const ridersMap = new Map<string, RiderDisplayInfo>();
+          if (riderIds.length > 0) {
+            try {
+              const ridersRes = await query<any>(
+                `SELECT id, name, email, phone, profile_image_url FROM users WHERE id = ANY($1::uuid[])`,
+                [riderIds]
+              );
+              for (const u of ridersRes.rows) {
+                ridersMap.set(u.id, {
+                  id: u.id,
+                  name: u.name,
+                  email: u.email,
+                  phone: u.phone || null,
+                  profile_image_url: u.profile_image_url || null,
+                });
+              }
+            } catch (rErr) {
+              logger.warn('Failed batch riders query in getAllRides', { error: (rErr as Error).message });
+            }
+          }
+
+          // 3. Batch fetch drivers
+          const driversMap = new Map<string, DriverDisplayInfo>();
+          if (driverIds.length > 0) {
+            try {
+              const driversRes = await query<any>(
+                `SELECT d.id, u.name, u.phone, u.profile_image_url, d.rating, d.total_rides,
+                        d.current_latitude, d.current_longitude,
+                        v.make, v.model, v.color, v.registration_number, v.year, v.vehicle_type
+                 FROM drivers d
+                 JOIN users u ON u.id = d.user_id
+                 LEFT JOIN vehicles v ON v.driver_id = d.id
+                 WHERE d.id = ANY($1::uuid[])`,
+                [driverIds]
+              );
+              for (const row of driversRes.rows) {
+                driversMap.set(row.id, {
+                  id: row.id,
+                  name: row.name,
+                  phone: row.phone,
+                  rating: parseFloat(row.rating || '5.0'),
+                  total_rides: parseInt(row.total_rides || '0', 10),
+                  profile_image_url: row.profile_image_url,
+                  current_latitude: row.current_latitude,
+                  current_longitude: row.current_longitude,
+                  vehicle: row.make
+                    ? {
+                        make: row.make,
+                        model: row.model,
+                        color: row.color,
+                        registration_number: row.registration_number,
+                        year: row.year,
+                        vehicle_type: row.vehicle_type,
+                      }
+                    : null,
+                });
+              }
+            } catch (dErr) {
+              logger.warn('Failed batch drivers query in getAllRides', { error: (dErr as Error).message });
+            }
+          }
+
+          // 4. Batch fetch payments
+          const paymentsMap = new Map<string, PaymentDisplayInfo>();
+          try {
+            const paymentsRes = await query<any>(
+              `SELECT id, ride_id, amount, payment_method, status, stripe_payment_intent_id, updated_at
+               FROM payments
+               WHERE ride_id = ANY($1::uuid[])
+               ORDER BY created_at DESC`,
+              [rideIds]
+            );
+            for (const p of paymentsRes.rows) {
+              if (!paymentsMap.has(p.ride_id)) {
+                paymentsMap.set(p.ride_id, {
+                  id: p.id,
+                  amount: parseFloat(p.amount || '0'),
+                  payment_method: p.payment_method,
+                  status: p.status,
+                  stripe_payment_intent_id: p.stripe_payment_intent_id || null,
+                  paid_at: p.updated_at || null,
+                });
+              }
+            }
+          } catch (pErr) {
+            logger.warn('Failed batch payments query in getAllRides', { error: (pErr as Error).message });
+          }
+
+          // Assemble
+          for (const ride of res.rows) {
+            const shortRef = `RN-${new Date(ride.created_at).toISOString().slice(0, 10).replace(/-/g, '')}-${ride.id.slice(0, 6).toUpperCase()}`;
+            const stops = stopsMap.get(ride.id) || [];
+            const rider = ride.rider_id ? ridersMap.get(ride.rider_id) || null : null;
+            const driver = ride.driver_id ? driversMap.get(ride.driver_id) || null : null;
+            const payment = paymentsMap.get(ride.id) || null;
+
+            dbRides.push({
+              ...ride,
+              distance_km: ride.distance_km != null ? Number(ride.distance_km) : 0,
+              estimated_duration_minutes: Number(ride.estimated_duration_minutes) || 0,
+              estimated_fare: Number(ride.estimated_fare) || 0,
+              final_fare: ride.final_fare != null ? Number(ride.final_fare) : null,
+              stops,
+              reference_id: shortRef,
+              driver,
+              rider,
+              payment,
+            });
+          }
         }
-        return results;
       } catch (error) {
-        logger.error('Error getting all rides for admin', {
+        logger.error('Error getting all rides from PostgreSQL for admin', {
           error: (error as Error).message,
         });
-        throw error;
       }
     }
 
-    const results: RideWithStops[] = [];
+    const memoryList: RideWithStops[] = [];
     for (const ride of memoryRides.values()) {
-      if (!status || ride.status === status) {
+      if (!status || status === 'all' || ride.status === status) {
         const stops = memoryRideStops.get(ride.id) || [];
-        results.push(await enrichRideWithDriver(ride, stops));
+        memoryList.push(await enrichRideWithDriver(ride, stops));
       }
     }
-    return results.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    const map = new Map<string, RideWithStops>();
+    for (const r of [...dbRides, ...memoryList]) {
+      if (r && r.id) {
+        map.set(r.id, r);
+      }
+    }
+    const combined = Array.from(map.values()).sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+
+    logger.info('Admin retrieved all rides record set', {
+      dbConfigured: isDatabaseConfigured(),
+      dbCount: dbRides.length,
+      memoryCount: memoryList.length,
+      totalCount: combined.length,
+      statusFilter: status || 'all',
+    });
+
+    return combined;
+  },
+
+  /**
+   * Admin: Assign / Reassign Driver to a ride
+   */
+  async adminAssignDriver(rideId: string, driverId: string): Promise<RideWithStops | null> {
+    if (isDatabaseConfigured()) {
+      try {
+        const res = await query<Ride>(
+          `UPDATE rides
+           SET driver_id = $1, status = CASE WHEN status = 'requested' THEN 'accepted' ELSE status END,
+               accepted_at = COALESCE(accepted_at, NOW()), updated_at = NOW()
+           WHERE id = $2 RETURNING *`,
+          [driverId, rideId]
+        );
+        if (res.rows.length === 0) return null;
+        const ride = res.rows[0];
+        const stopsRes = await query<RideStop>(`SELECT * FROM ride_stops WHERE ride_id = $1 ORDER BY stop_order ASC`, [ride.id]);
+        return enrichRideWithDriver(ride, stopsRes.rows);
+      } catch (err) {
+        logger.error('Error in adminAssignDriver in database', { error: (err as Error).message, rideId, driverId });
+        throw err;
+      }
+    }
+
+    const ride = memoryRides.get(rideId);
+    if (!ride) return null;
+    ride.driver_id = driverId;
+    if (ride.status === 'requested') {
+      ride.status = 'accepted';
+      ride.accepted_at = new Date().toISOString();
+    }
+    ride.updated_at = new Date().toISOString();
+    memoryRides.set(rideId, ride);
+    const stops = memoryRideStops.get(rideId) || [];
+    return enrichRideWithDriver(ride, stops);
+  },
+
+  /**
+   * Admin: Override / Update Ride Status
+   */
+  async adminUpdateRideStatus(rideId: string, newStatus: RideStatus, reason?: string): Promise<RideWithStops | null> {
+    const now = new Date().toISOString();
+    if (isDatabaseConfigured()) {
+      try {
+        let setClause = `status = $1, updated_at = NOW()`;
+        const params: unknown[] = [newStatus, rideId];
+        if (newStatus === 'cancelled') {
+          setClause += `, cancelled_at = NOW(), cancellation_reason = $3`;
+          params.push(reason || 'Cancelled by platform administrator');
+        } else if (newStatus === 'ride_completed') {
+          setClause += `, completed_at = NOW()`;
+        } else if (newStatus === 'ride_started') {
+          setClause += `, started_at = NOW()`;
+        }
+        const res = await query<Ride>(`UPDATE rides SET ${setClause} WHERE id = $2 RETURNING *`, params);
+        if (res.rows.length === 0) return null;
+        const ride = res.rows[0];
+        const stopsRes = await query<RideStop>(`SELECT * FROM ride_stops WHERE ride_id = $1 ORDER BY stop_order ASC`, [ride.id]);
+        return enrichRideWithDriver(ride, stopsRes.rows);
+      } catch (err) {
+        logger.error('Error in adminUpdateRideStatus in database', { error: (err as Error).message, rideId, newStatus });
+        throw err;
+      }
+    }
+
+    const ride = memoryRides.get(rideId);
+    if (!ride) return null;
+    ride.status = newStatus;
+    ride.updated_at = now;
+    if (newStatus === 'cancelled') {
+      ride.cancelled_at = now;
+      ride.cancellation_reason = reason || 'Cancelled by platform administrator';
+    } else if (newStatus === 'ride_completed') {
+      ride.completed_at = now;
+    } else if (newStatus === 'ride_started') {
+      ride.started_at = now;
+    }
+    memoryRides.set(rideId, ride);
+    const stops = memoryRideStops.get(rideId) || [];
+    return enrichRideWithDriver(ride, stops);
   },
 
   /**

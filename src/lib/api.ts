@@ -663,6 +663,65 @@ export const api = {
   },
 
   /**
+   * Admin: Diagnostics & Database Connection Verification: GET /api/admin/diagnostics
+   */
+  async getAdminDiagnostics(): Promise<{
+    success: boolean;
+    data: {
+      databaseConfigured: boolean;
+      databaseConnected: boolean;
+      dbMessage: string;
+      latencyMs: number;
+      ridesCount: number;
+      driversCount: number;
+      usersCount: number;
+      paymentsCount: number;
+      serverTime: string;
+    };
+  }> {
+    return request('/admin/diagnostics');
+  },
+
+  /**
+   * Admin: Get specific ride audit details: GET /api/admin/rides/:id
+   */
+  async getAdminRide(rideId: string): Promise<{ success: boolean; data: RideWithStops }> {
+    return request<{ success: boolean; data: RideWithStops }>(`/admin/rides/${rideId}`);
+  },
+
+  /**
+   * Admin: Assign or reassign driver to ride: POST /api/admin/rides/:id/assign-driver
+   */
+  async adminAssignDriver(
+    rideId: string,
+    driverId: string
+  ): Promise<{ success: boolean; message: string; data: RideWithStops }> {
+    return request<{ success: boolean; message: string; data: RideWithStops }>(
+      `/admin/rides/${rideId}/assign-driver`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ driverId }),
+      }
+    );
+  },
+
+  /**
+   * Admin: Update ride status / cancellation: PATCH /api/admin/rides/:id/status
+   */
+  async adminUpdateRideStatus(
+    rideId: string,
+    status: string,
+    reason?: string
+  ): Promise<{ success: boolean; message: string; data: RideWithStops }> {
+    return request<{ success: boolean; message: string; data: RideWithStops }>(`/admin/rides/${rideId}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status, reason }),
+    });
+  },
+
+  /**
    * Admin: All Payments: GET /api/admin/payments
    */
   async getAdminPayments(): Promise<{ success: boolean; data: Payment[]; count: number }> {
@@ -695,5 +754,162 @@ export const api = {
    */
   async getPaymentStatus(rideId: string): Promise<{ success: boolean; data: Payment | null }> {
     return request(`/payments/ride/${rideId}`);
+  },
+
+  /**
+   * Get payment settings: GET /api/payments/settings
+   */
+  async getPaymentSettings(): Promise<{ success: boolean; data: any }> {
+    return request('/payments/settings');
+  },
+
+  /**
+   * Update payment settings: PUT /api/admin/payments/settings
+   */
+  async updatePaymentSettings(data: any): Promise<{ success: boolean; message: string; data: any }> {
+    return request('/payments/admin/payments/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  },
+
+  /**
+   * Get commission settings: GET /api/admin/commission-settings
+   */
+  async getCommissionSettings(): Promise<{ success: boolean; data: any }> {
+    return request('/payments/admin/commission-settings');
+  },
+
+  /**
+   * Update commission settings: PUT /api/admin/commission-settings
+   */
+  async updateCommissionSettings(data: any): Promise<{ success: boolean; message: string; data: any }> {
+    return request('/payments/admin/commission-settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  },
+
+  /**
+   * Get payment methods: GET /api/payments/methods
+   */
+  async getPaymentMethods(): Promise<{ success: boolean; data: any[] }> {
+    return request('/payments/methods');
+  },
+
+  /**
+   * Get all payment methods (Admin): GET /api/admin/payment-methods
+   */
+  async getAdminPaymentMethods(): Promise<{ success: boolean; data: any[] }> {
+    return request('/payments/admin/payment-methods');
+  },
+
+  /**
+   * Create payment method (Admin): POST /api/admin/payment-methods
+   */
+  async createPaymentMethod(data: any): Promise<{ success: boolean; message: string; data: any }> {
+    return request('/payments/admin/payment-methods', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  },
+
+  /**
+   * Update payment method (Admin): PUT /api/admin/payment-methods/:id
+   */
+  async updatePaymentMethod(id: string, data: any): Promise<{ success: boolean; message: string; data: any }> {
+    return request(`/payments/admin/payment-methods/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  },
+
+  /**
+   * Delete payment method (Admin): DELETE /api/admin/payment-methods/:id
+   */
+  async deletePaymentMethod(id: string): Promise<{ success: boolean; message: string }> {
+    return request(`/payments/admin/payment-methods/${id}`, {
+      method: 'DELETE',
+    });
+  },
+  /**
+   * Get customer profile: GET /api/profile
+   */
+  async getProfile(): Promise<{ success: boolean; data: any }> {
+    return request('/profile');
+  },
+
+  /**
+   * Update profile extension: PATCH /api/profile/extension
+   */
+  async updateProfileExtension(data: any): Promise<{ success: boolean; data: any }> {
+    return request('/profile/extension', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  },
+
+  /**
+   * Add emergency contact: POST /api/profile/emergency-contacts
+   */
+  async addEmergencyContact(data: any): Promise<{ success: boolean; data: any }> {
+    return request('/profile/emergency-contacts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  },
+
+  /**
+   * Delete emergency contact: DELETE /api/profile/emergency-contacts/:contactId
+   */
+  async deleteEmergencyContact(contactId: string): Promise<{ success: boolean; message: string }> {
+    return request(`/profile/emergency-contacts/${contactId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  /**
+   * Update safety preferences: PATCH /api/profile/safety-preferences
+   */
+  async updateSafetyPreferences(data: any): Promise<{ success: boolean; data: any }> {
+    return request('/profile/safety-preferences', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  },
+
+  /**
+   * Get emergency contacts: GET /api/profile/emergency-contacts
+   */
+  async getEmergencyContacts(): Promise<{ success: boolean; data: any[] }> {
+    return request('/profile/emergency-contacts');
+  },
+
+  /**
+   * Get safety preferences: GET /api/profile/safety-preferences
+   */
+  async getSafetyPreferences(): Promise<{ success: boolean; data: any }> {
+    return request('/profile/safety-preferences');
+  },
+
+  /**
+   * Get admin full rider profile: GET /api/admin/riders/:id/profile
+   */
+  async getAdminRiderProfile(id: string): Promise<{ success: boolean; data: any }> {
+    return request(`/admin/riders/${id}/profile`);
+  },
+
+  /**
+   * Get admin full driver profile: GET /api/admin/drivers/:id/profile
+   */
+  async getAdminDriverProfile(id: string): Promise<{ success: boolean; data: any }> {
+    return request(`/admin/drivers/${id}/profile`);
   },
 };

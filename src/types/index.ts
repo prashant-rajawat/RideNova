@@ -121,6 +121,23 @@ export interface DriverDisplayInfo {
   } | null;
 }
 
+export interface RiderDisplayInfo {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  profile_image_url?: string | null;
+}
+
+export interface PaymentDisplayInfo {
+  id: string;
+  amount: number;
+  payment_method: string;
+  status: string;
+  stripe_payment_intent_id?: string | null;
+  paid_at?: string | null;
+}
+
 export interface RideWithStops {
   id: string;
   rider_id: string;
@@ -144,7 +161,14 @@ export interface RideWithStops {
   stops: RideStop[];
   reference_id?: string;
   driver?: DriverDisplayInfo | null;
+  rider?: RiderDisplayInfo | null;
+  payment?: PaymentDisplayInfo | null;
   scheduled_at?: string | null;
+  accepted_at?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  cancelled_at?: string | null;
+  cancellation_reason?: string | null;
 }
 
 export interface RideApiResponse {
@@ -184,6 +208,8 @@ export interface Vehicle {
   rc_document_url?: string | null;
   insurance_document_url?: string | null;
   permit_document_url?: string | null;
+  puc_expiry?: string | null;
+  puc_document_url?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -215,6 +241,13 @@ export interface DriverProfile {
   bankAccountNumberMasked?: string | null;
   bankIfsc?: string | null;
   bankStatus?: string | null;
+  upiId?: string | null;
+  operatingCity?: string | null;
+  preferredLanguage?: string | null;
+  profilePhotoUrl?: string | null;
+  autoAcceptRides?: boolean;
+  workingHoursPreference?: string | null;
+  quietRidePreference?: boolean;
   kycSubmittedAt?: string | null;
   rejectionReason?: string | null;
   vehicle: Vehicle | null;
@@ -227,8 +260,15 @@ export interface DriverKycPayload {
   fullName?: string;
   phone?: string;
   dob?: string;
+  gender?: string;
   address?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  postalCode?: string;
   profilePhotoUrl?: string;
+  preferredLanguage?: string;
+  alternatePhone?: string;
 
   // Step 2: Driving Licence
   licenseNumber?: string;
@@ -250,6 +290,8 @@ export interface DriverKycPayload {
   rcDocumentUrl?: string;
   insuranceDocumentUrl?: string;
   permitDocumentUrl?: string;
+  pucExpiry?: string;
+  pucDocumentUrl?: string;
 
   // Step 4: Identity and Bank
   idType?: string;
@@ -258,8 +300,15 @@ export interface DriverKycPayload {
   bankAccountName?: string;
   bankAccountNumber?: string;
   bankIfsc?: string;
+  upiId?: string;
 
-  // Step 5: Submit action
+  // Step 5: Preferences
+  operatingCity?: string;
+  autoAcceptRides?: boolean;
+  workingHoursPreference?: string;
+  quietRidePreference?: boolean;
+
+  // Step 6: Submit action
   submitForReview?: boolean;
 }
 
@@ -439,3 +488,46 @@ export interface ReceiptData {
 }
 
 
+export interface UserProfileExtension {
+  user_id: string;
+  legal_name?: string | null;
+  display_name?: string | null;
+  date_of_birth?: string | null;
+  gender?: string | null;
+  city: string | null;
+  state?: string | null;
+  country?: string | null;
+  postal_code?: string | null;
+  address_line1?: string | null;
+  address_line2?: string | null;
+  landmark?: string | null;
+  alternate_phone: string | null;
+  preferred_language: string;
+  profile_completion_percentage: number;
+  updated_at: string;
+}
+
+export interface EmergencyContact {
+  id: string;
+  user_id: string;
+  name: string;
+  relationship: string;
+  phone_number: string;
+  phone?: string;
+  is_primary: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SafetyPreferences {
+  user_id: string;
+  accessibility_notes: string | null;
+  emergency_notes: string | null;
+  blood_group?: string | null;
+  allergies?: string | null;
+  medical_conditions?: string | null;
+  special_assistance_notes?: string | null;
+  emergency_medical_notes?: string | null;
+  consent_given: boolean;
+  updated_at: string;
+}

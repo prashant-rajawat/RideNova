@@ -110,7 +110,7 @@ export const driverRepository = {
   /**
    * Find or create driver profile for a verified driver user
    */
-  async findOrCreate(userId: string, defaultLicense?: string, initialStatus: DriverStatus = 'pending'): Promise<DriverWithVehicle> {
+  async findOrCreate(userId: string, defaultLicense?: string, initialStatus: DriverStatus = 'approved'): Promise<DriverWithVehicle> {
     const existing = await this.findByUserId(userId);
     if (existing) {
       return existing;

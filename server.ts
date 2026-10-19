@@ -13,6 +13,20 @@ async function startServer() {
   const PORT = config.PORT || 3000;
   const isProduction = config.NODE_ENV === 'production';
 
+  // Ensure PostgreSQL schema is up-to-date if database is configured
+  try {
+    const { isDatabaseConfigured } = await import('./backend/src/db/index.ts');
+    if (isDatabaseConfigured()) {
+      const { runMigrations } = await import('./backend/src/db/migrate.ts');
+      const migrationRes = await runMigrations();
+      logger.info('Database schema migration check completed', migrationRes);
+    }
+  } catch (migErr) {
+    logger.warn('Non-fatal migration check warning on startup', {
+      error: (migErr as Error).message,
+    });
+  }
+
   if (!isProduction) {
     // Mount Vite dev server middleware
     logger.info('Initializing Vite dev server middleware...');

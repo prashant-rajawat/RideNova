@@ -1,63 +1,77 @@
-import React, { useState, useEffect } from 'react';
-import { User, Mail, Phone, Shield, ArrowLeft, Check, AlertCircle, Save, Car, CreditCard } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { 
+  User, 
+  Phone, 
+  ShieldAlert, 
+  HeartPulse, 
+  Sliders, 
+  LayoutDashboard, 
+  ArrowLeft, 
+  Loader2 
+} from 'lucide-react';
 import { useAuthSession } from '../../context/AuthContext.tsx';
 import { api } from '../../lib/api.ts';
-import { DriverProfile } from '../../types/index.ts';
-import { toCanonicalRole, toDisplayRole } from '../../lib/roles.ts';
+import { UserProfileExtension, EmergencyContact, SafetyPreferences as SafetyPrefsType } from '../../types/index.ts';
+import { toDisplayRole } from '../../lib/roles.ts';
+import { Overview } from './tabs/Overview.tsx';
+import { PersonalForm } from './tabs/PersonalForm.tsx';
+import { ContactForm } from './tabs/ContactForm.tsx';
+import { EmergencyContacts } from './tabs/EmergencyContacts.tsx';
+import { SafetyPreferences } from './tabs/SafetyPreferences.tsx';
+import { PreferencesForm } from './tabs/PreferencesForm.tsx';
+
+import { DriverAccountSettings } from './driver/DriverAccountSettings.tsx';
 
 interface ProfilePageProps {
   onNavigate: (route: string) => void;
 }
 
+type TabType = 'overview' | 'personal' | 'contact' | 'emergency' | 'safety' | 'preferences';
+
+const TABS: { id: TabType; label: string; icon: React.FC<{ className?: string }> }[] = [
+  { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+  { id: 'personal', label: 'Personal Information', icon: User },
+  { id: 'contact', label: 'Contact Numbers', icon: Phone },
+  { id: 'emergency', label: 'Emergency Contacts', icon: ShieldAlert },
+  { id: 'safety', label: 'Safety & Assistance', icon: HeartPulse },
+  { id: 'preferences', label: 'Ride Preferences', icon: Sliders },
+];
+
 export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate }) => {
-  const { user, updateProfile } = useAuthSession();
-  const [name, setName] = useState(user?.name || '');
-  const [phone, setPhone] = useState(user?.phone || '');
-  const [driverProfile, setDriverProfile] = useState<DriverProfile | null>(null);
-  const [licenseNumber, setLicenseNumber] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { user } = useAuthSession();
+
+  // If authenticated user is a Driver Partner, render the dedicated Driver Account Settings suite
+  if (user?.role === 'driver') {
+    return <DriverAccountSettings onNavigate={onNavigate} />;
+  }
+
+  const [activeTab, setActiveTab] = useState<TabType>('overview');
+
+  // State for all sections
+  const [profile, setProfile] = useState<UserProfileExtension | null>(null);
+  const [contacts, setContacts] = useState<EmergencyContact[]>([]);
+  const [safety, setSafety] = useState<SafetyPrefsType | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.getProfile();
+      if (res.success && res.data) {
+        setProfile(res.data.extension);
+        setContacts(res.data.emergencyContacts || []);
+        setSafety(res.data.safetyPrefs);
+      }
+    } catch (err) {
+      console.error('Failed to load profile data', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    if (user?.role === 'driver') {
-      api.getDriverProfile().then((res) => {
-        if (res.success && res.data) {
-          setDriverProfile(res.data);
-          setLicenseNumber(res.data.licenseNumber || '');
-        }
-      }).catch((err) => {
-        console.error('Failed to load driver profile info:', err);
-      });
-    }
-  }, [user?.role]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    setError(null);
-    setSuccess(false);
-
-    try {
-      await updateProfile({
-        name: name.trim(),
-        phone: phone.trim() || undefined,
-      });
-
-      if (user?.role === 'driver' && licenseNumber.trim()) {
-        await api.updateDriverProfile({
-          licenseNumber: licenseNumber.trim(),
-        });
-      }
-
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 3000);
-    } catch (err) {
-      setError((err as Error).message || 'Failed to update profile');
-    } finally {
-      setSaving(false);
-    }
-  };
+    loadData();
+  }, [loadData]);
 
   const getDashboardRoute = () => {
     if (user?.role === 'driver') return 'driver';
@@ -65,158 +79,121 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate }) => {
     return 'rider';
   };
 
+  const getTabTitle = () => {
+    switch (activeTab) {
+      case 'overview':
+        return 'Account Overview';
+      case 'personal':
+        return 'Personal Information';
+      case 'contact':
+        return 'Contact Information';
+      case 'emergency':
+        return 'Emergency Contacts';
+      case 'safety':
+        return 'Safety & Health Preferences';
+      case 'preferences':
+        return 'Ride Comfort Preferences';
+    }
+  };
+
+  const getTabDescription = () => {
+    switch (activeTab) {
+      case 'overview':
+        return 'Review your account strength, personal overview, and security standing.';
+      case 'personal':
+        return 'Manage your legal identity, date of birth, preferred language, and residential address.';
+      case 'contact':
+        return 'Maintain verified phone numbers and communication options.';
+      case 'emergency':
+        return 'Configure trusted family or friends to receive automatic SOS alerts.';
+      case 'safety':
+        return 'Provide special assistance needs and emergency medical details for first responders.';
+      case 'preferences':
+        return 'Customize your in-cabin atmosphere, AC temperature, and conversational preference.';
+    }
+  };
+
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8">
-      {/* Back button */}
+    <div className="max-w-5xl mx-auto px-4 py-8 animate-fade-in">
       <button
         onClick={() => onNavigate(getDashboardRoute())}
-        className="inline-flex items-center gap-2 text-xs font-medium text-[#737373] hover:text-[#171717] mb-6 transition-colors"
+        className="inline-flex items-center gap-2 text-xs font-semibold text-[#737373] hover:text-[#171717] mb-6 transition-colors group"
       >
-        <ArrowLeft className="h-4 w-4" />
+        <ArrowLeft className="h-4 w-4 group-hover:-translate-x-0.5 transition-transform" />
         <span>Back to {toDisplayRole(user?.role)} Dashboard</span>
       </button>
 
-      <div className="rounded-xl border border-[#E5E5E5] bg-[#FFFFFF] p-6 sm:p-8 shadow-sm">
-        <div className="pb-6 border-b border-[#E5E5E5] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="h-16 w-16 rounded-full bg-[#E5E5E5] border-2 border-[#E21D2B] flex items-center justify-center text-xl font-bold text-[#E21D2B] shrink-0">
-              {user?.name?.charAt(0) || 'U'}
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-[#171717]">{user?.name}</h1>
-              <p className="text-xs text-[#737373]">{user?.email}</p>
-              <div className="mt-2 flex items-center gap-2">
-                <span className="text-[11px] font-mono px-2 py-0.5 rounded uppercase font-bold bg-[#E21D2B]/10 text-[#E21D2B] border border-[#E21D2B]/30">
-                  {toCanonicalRole(user?.role)}
-                </span>
-                <span className="text-[11px] text-[#737373]">Database Verified</span>
-              </div>
-            </div>
+      <div className="flex flex-col md:flex-row gap-6">
+        {/* Navigation Sidebar */}
+        <div className="w-full md:w-64 space-y-1 shrink-0">
+          <div className="px-3 pb-2">
+            <h1 className="text-sm font-bold text-[#171717]">Account Settings</h1>
+            <p className="text-[11px] text-[#737373] mt-0.5">Manage your profile & safety</p>
+          </div>
+
+          <div className="space-y-1">
+            {TABS.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
+                    isActive
+                      ? 'bg-[#FFF1F2] text-[#E21D2B] shadow-xs'
+                      : 'text-[#737373] hover:text-[#171717] hover:bg-[#FAFAFA]'
+                  }`}
+                >
+                  <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-[#E21D2B]' : 'text-[#737373]'}`} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        {success && (
-          <div className="mt-5 flex items-center gap-2 rounded-lg border border-[#15803D]/30 bg-[#15803D]/10 p-3 text-xs text-[#15803D]">
-            <Check className="h-4 w-4 shrink-0" />
-            <span>Profile information updated successfully.</span>
-          </div>
-        )}
-
-        {error && (
-          <div className="mt-5 flex items-center gap-2 rounded-lg border border-[#B91C1C]/30 bg-[#B91C1C]/10 p-3 text-xs text-[#B91C1C]">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="mt-6 space-y-5">
-          <div>
-            <label className="block text-xs font-medium text-[#737373] mb-1 flex items-center gap-1.5">
-              <User className="h-3.5 w-3.5 text-[#E21D2B]" />
-              Full Name (Safe Field)
-            </label>
-            <input
-              type="text"
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] px-3.5 py-2.5 text-xs text-[#171717] focus:border-[#E21D2B] focus:outline-none"
-            />
+        {/* Content Area */}
+        <div className="flex-1 rounded-2xl border border-[#E5E5E5] bg-[#FFFFFF] p-6 shadow-sm min-h-[460px]">
+          <div className="pb-4 mb-6 border-b border-[#E5E5E5]">
+            <h2 className="text-base font-bold text-[#171717]">{getTabTitle()}</h2>
+            <p className="text-xs text-[#737373] mt-0.5">{getTabDescription()}</p>
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-[#737373] mb-1 flex items-center gap-1.5">
-              <Mail className="h-3.5 w-3.5 text-[#737373]" />
-              Email Address (Clerk Verified - Read Only)
-            </label>
-            <input
-              type="email"
-              disabled
-              value={user?.email || ''}
-              className="w-full rounded-lg border border-[#E5E5E5] bg-[#FFFFFF]/50 px-3.5 py-2.5 text-xs text-[#737373] cursor-not-allowed font-mono"
-            />
-            <p className="mt-1 text-[11px] text-[#737373]">
-              Email is managed by Clerk Authentication for security.
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-[#737373] mb-1 flex items-center gap-1.5">
-              <Phone className="h-3.5 w-3.5 text-[#E21D2B]" />
-              Phone Number (Safe Field)
-            </label>
-            <input
-              type="tel"
-              placeholder="+1 (555) 000-0000"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className="w-full rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] px-3.5 py-2.5 text-xs text-[#171717] placeholder-[#737373]/50 focus:border-[#E21D2B] focus:outline-none"
-            />
-          </div>
-
-          {user?.role === 'driver' && (
-            <div>
-              <label className="block text-xs font-medium text-[#737373] mb-1 flex items-center gap-1.5">
-                <CreditCard className="h-3.5 w-3.5 text-[#E21D2B]" />
-                Driver License Number
-              </label>
-              <input
-                type="text"
-                placeholder="GJ-06-2022-987654"
-                value={licenseNumber}
-                onChange={(e) => setLicenseNumber(e.target.value)}
-                className="w-full rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] px-3.5 py-2.5 text-xs text-[#171717] uppercase font-mono focus:border-[#E21D2B] focus:outline-none"
-              />
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <Loader2 className="h-7 w-7 text-[#E21D2B] animate-spin mb-3" />
+              <p className="text-xs font-semibold text-[#171717]">Loading your profile settings...</p>
+              <p className="text-[11px] text-[#737373] mt-1">Retrieving verified records from database.</p>
             </div>
+          ) : (
+            <>
+              {activeTab === 'overview' && (
+                <Overview
+                  profile={profile}
+                  contacts={contacts}
+                  safety={safety}
+                  onNavigateTab={(tab) => setActiveTab(tab)}
+                />
+              )}
+              {activeTab === 'personal' && (
+                <PersonalForm profile={profile} onUpdate={loadData} />
+              )}
+              {activeTab === 'contact' && (
+                <ContactForm profile={profile} onUpdate={loadData} />
+              )}
+              {activeTab === 'emergency' && (
+                <EmergencyContacts contacts={contacts} onUpdate={loadData} />
+              )}
+              {activeTab === 'safety' && (
+                <SafetyPreferences safety={safety} onUpdate={loadData} />
+              )}
+              {activeTab === 'preferences' && (
+                <PreferencesForm profile={profile} onUpdate={loadData} />
+              )}
+            </>
           )}
-
-          <div>
-            <label className="block text-xs font-medium text-[#737373] mb-1 flex items-center gap-1.5">
-              <Shield className="h-3.5 w-3.5 text-[#737373]" />
-              Application Role (Protected - Server Side Only)
-            </label>
-            <div className="flex items-center justify-between rounded-lg border border-[#E5E5E5] bg-[#FFFFFF]/50 px-3.5 py-2.5 text-xs">
-              <span className="font-mono font-bold text-[#E21D2B] uppercase">
-                {user?.role}
-              </span>
-              <span className="text-[11px] text-[#737373]">
-                Cannot be altered by frontend requests
-              </span>
-            </div>
-          </div>
-
-          {user?.role === 'driver' && driverProfile?.vehicle && (
-            <div className="rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] p-4 text-xs">
-              <div className="flex items-center justify-between">
-                <span className="text-[#737373] flex items-center gap-1.5">
-                  <Car className="h-4 w-4 text-[#E21D2B]" />
-                  <span>Assigned Vehicle:</span>
-                </span>
-                <span className="font-semibold text-[#171717]">
-                  {driverProfile.vehicle.make} {driverProfile.vehicle.model} ({driverProfile.vehicle.registration_number})
-                </span>
-              </div>
-            </div>
-          )}
-
-          <div className="pt-4 border-t border-[#E5E5E5] flex justify-end gap-3">
-            <button
-              type="button"
-              onClick={() => onNavigate(getDashboardRoute())}
-              className="rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] px-4 py-2 text-xs font-semibold text-[#737373] hover:text-[#171717]"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="flex items-center gap-2 rounded-lg bg-[#E21D2B] px-4 py-2 text-xs font-semibold text-[#FFFFFF] hover:bg-[#E21D2B]/90 transition-all disabled:opacity-50"
-            >
-              <Save className="h-3.5 w-3.5" />
-              <span>{saving ? 'Saving...' : 'Save Profile Changes'}</span>
-            </button>
-          </div>
-        </form>
+        </div>
       </div>
     </div>
   );

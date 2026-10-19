@@ -55,6 +55,7 @@ import {
   KycStatus,
 } from '../../types/index.ts';
 import { DashboardLayout } from '../layout/DashboardLayout.tsx';
+import { DriverAccountSettings } from '../profile/driver/DriverAccountSettings.tsx';
 
 interface DriverDashboardProps {
   onNavigate: (route: string) => void;
@@ -1267,8 +1268,7 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({ onNavigate }) 
                     <button
                       type="button"
                       onClick={() => {
-                        const reason = window.prompt('Please enter cancellation reason:');
-                        if (reason) handleUpdateRideStatus('cancelled', reason);
+                        handleUpdateRideStatus('cancelled', 'Driver cancellation (operational delay)');
                       }}
                       className="w-full text-center text-xs text-[#B91C1C] hover:underline pt-2 font-medium cursor-pointer"
                     >
@@ -1769,87 +1769,10 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({ onNavigate }) 
         </div>
       )}
 
-      {/* SECTION 8: DRIVER PROFILE */}
+      {/* SECTION 8: DRIVER ACCOUNT SETTINGS & SAFETY CENTER */}
       {activeTab === 'profile' && (
-        <div className="mt-6 space-y-6 max-w-2xl">
-          <div className="pb-3 border-b border-[#E5E5E5]">
-            <h2 className="text-base font-bold text-[#171717]">Partner Profile & Preferences</h2>
-            <p className="text-xs text-[#737373]">
-              Update your contact credentials and emergency information.
-            </p>
-          </div>
-
-          <form
-            onSubmit={async (e) => {
-              e.preventDefault();
-              setActionLoading(true);
-              try {
-                await api.updateDriverProfile({
-                  name: kycForm.fullName,
-                  phone: kycForm.phone,
-                  licenseNumber: kycForm.licenseNumber,
-                });
-                showSuccess('Driver profile updated successfully.');
-                loadDriverData();
-              } catch (err: any) {
-                showError(err.message || 'Failed to update profile.');
-              } finally {
-                setActionLoading(false);
-              }
-            }}
-            className="space-y-4 text-xs"
-          >
-            <div>
-              <label className="block font-bold text-[#737373] mb-1">Full Legal Name</label>
-              <input
-                type="text"
-                required
-                value={kycForm.fullName || ''}
-                onChange={(e) => setKycForm({ ...kycForm, fullName: e.target.value })}
-                className="w-full rounded-xl border border-[#E5E5E5] px-3.5 py-2.5 text-[#171717] focus:border-[#E21D2B] focus:outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="block font-bold text-[#737373] mb-1">Phone Number (Verified)</label>
-              <input
-                type="text"
-                required
-                value={kycForm.phone || ''}
-                onChange={(e) => setKycForm({ ...kycForm, phone: e.target.value })}
-                className="w-full rounded-xl border border-[#E5E5E5] px-3.5 py-2.5 text-[#171717] focus:border-[#E21D2B] focus:outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="block font-bold text-[#737373] mb-1">Residential Address</label>
-              <textarea
-                rows={3}
-                value={kycForm.address || ''}
-                onChange={(e) => setKycForm({ ...kycForm, address: e.target.value })}
-                className="w-full rounded-xl border border-[#E5E5E5] px-3.5 py-2.5 text-[#171717] focus:border-[#E21D2B] focus:outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="block font-bold text-[#737373] mb-1">Driving License Number</label>
-              <input
-                type="text"
-                required
-                value={kycForm.licenseNumber || ''}
-                onChange={(e) => setKycForm({ ...kycForm, licenseNumber: e.target.value })}
-                className="w-full rounded-xl border border-[#E5E5E5] px-3.5 py-2.5 text-[#171717] font-mono focus:border-[#E21D2B] focus:outline-none uppercase"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={actionLoading}
-              className="rounded-xl bg-[#E21D2B] px-5 py-2.5 text-xs font-bold text-white hover:bg-[#BE1622] transition-all shadow-md cursor-pointer disabled:opacity-50"
-            >
-              Save Profile Changes
-            </button>
-          </form>
+        <div className="mt-2">
+          <DriverAccountSettings onNavigate={onNavigate} />
         </div>
       )}
 
