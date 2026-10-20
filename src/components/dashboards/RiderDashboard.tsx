@@ -41,6 +41,8 @@ import {
 } from '../../types/index.ts';
 import { api } from '../../lib/api.ts';
 import { useRideSubscription } from '../../hooks/useRideSubscription.ts';
+import { CustomerHome } from './CustomerHome.tsx';
+import { BottomNav } from '../layout/BottomNav.tsx';
 
 interface RiderDashboardProps {
   onNavigate: (route: string) => void;
@@ -299,398 +301,49 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({ onNavigate }) =>
 
   return (
     <DashboardLayout
-      role="CUSTOMER"
+      role="RIDER"
       navItems={navItems}
       activeTab={activeTab}
       setActiveTab={(tab) => setActiveTab(tab as typeof activeTab)}
       user={user}
       logout={logout}
     >
-      {/* Welcome Header */}
-      <div className="pb-6 border-b border-[#E5E5E5] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-[#E21D2B]">Rider Dashboard</span>
-            <span className="text-xs text-[#737373]">·</span>
-            <span className="text-xs text-[#15803D] font-semibold flex items-center gap-1">
-              <span className="h-2 w-2 rounded-full bg-[#15803D]"></span>
-              Verified Rider
-            </span>
-          </div>
-          <h1 className="mt-1 text-2xl font-extrabold text-[#171717]">Welcome, {user?.name || 'Rider'}</h1>
-          <p className="mt-1 text-xs text-[#737373]">
-            Plan multi-stop routes, track driver arrival in real time, and view itemized receipts.
-          </p>
-        </div>
-
-        <button
-          onClick={() => onNavigate('book-ride')}
-          className="flex items-center gap-2 rounded-lg bg-[#E21D2B] px-4 py-2.5 text-xs font-bold text-[#FFFFFF] shadow-md shadow-[#E21D2B]/20 hover:bg-[#BE1622] transition-all self-start sm:self-auto"
-        >
-          <Plus className="h-4 w-4" />
-          <span>Book a Ride</span>
-        </button>
-      </div>
-
-      {/* Alerts */}
+      {/* Status Message */}
       {statusMessage && (
         <div
-          className={`mt-4 p-3 rounded-lg text-xs flex items-center justify-between ${
+          className={`mb-4 flex items-center justify-between rounded-xl p-3.5 text-xs animate-fade-in ${
             statusMessage.type === 'success'
-              ? 'bg-[#15803D]/10 border border-[#15803D]/30 text-[#15803D]'
-              : 'bg-[#B91C1C]/10 border border-[#B91C1C]/30 text-[#B91C1C]'
+              ? 'border border-[#15803D]/30 bg-[#15803D]/10 text-[#15803D]'
+              : 'border border-[#B91C1C]/30 bg-[#B91C1C]/10 text-[#B91C1C]'
           }`}
         >
           <div className="flex items-center gap-2">
             {statusMessage.type === 'success' ? (
-              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-[#15803D]" />
             ) : (
-              <AlertCircle className="h-4 w-4 shrink-0" />
+              <AlertCircle className="h-4 w-4 shrink-0 text-[#B91C1C]" />
             )}
             <span>{statusMessage.text}</span>
           </div>
-          <button onClick={() => setStatusMessage(null)} className="hover:opacity-75 font-bold">
-            ✕
+          <button
+            onClick={() => setStatusMessage(null)}
+            className="text-xs font-semibold hover:underline"
+          >
+            Dismiss
           </button>
         </div>
       )}
 
       {/* TAB 1: HOME */}
       {activeTab === 'home' && (
-        <div className="mt-6 space-y-6">
-          {/* Quick Actions Bar */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            <button
-              onClick={() => onNavigate('book-ride')}
-              className="rounded-xl border border-[#E5E5E5] bg-[#FFFFFF] p-4 text-left hover:border-[#E21D2B] transition-all group shadow-2xs"
-            >
-              <div className="flex items-center justify-between text-xs font-bold text-[#171717] group-hover:text-[#E21D2B]">
-                <span>Book Instant Ride</span>
-                <ArrowRight className="h-4 w-4 text-[#E21D2B]" />
-              </div>
-              <p className="mt-1 text-[11px] text-[#737373]">
-                Authoritative routing, multi-stops, and instant cab hail.
-              </p>
-            </button>
-
-            <button
-              onClick={() => onNavigate('book-ride')}
-              className="rounded-xl border border-[#E5E5E5] bg-[#FFFFFF] p-4 text-left hover:border-[#E21D2B] transition-all group shadow-2xs"
-            >
-              <div className="flex items-center justify-between text-xs font-bold text-[#171717] group-hover:text-[#E21D2B]">
-                <span>Schedule for Later</span>
-                <Calendar className="h-4 w-4 text-[#E21D2B]" />
-              </div>
-              <p className="mt-1 text-[11px] text-[#737373]">
-                Pre-book rides for airport runs or upcoming appointments.
-              </p>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('history')}
-              className="rounded-xl border border-[#E5E5E5] bg-[#FFFFFF] p-4 text-left hover:border-[#E21D2B] transition-all group shadow-2xs"
-            >
-              <div className="flex items-center justify-between text-xs font-bold text-[#171717] group-hover:text-[#E21D2B]">
-                <span>Ride History ({rides.length})</span>
-                <History className="h-4 w-4 text-[#737373]" />
-              </div>
-              <p className="mt-1 text-[11px] text-[#737373]">
-                Download official PDF receipts and rate past drivers.
-              </p>
-            </button>
-
-            <button
-              onClick={() => setIsSosModalOpen(true)}
-              className="rounded-xl border border-[#E21D2B]/30 bg-[#FFF1F2] p-4 text-left hover:bg-[#E21D2B]/15 transition-all group shadow-2xs"
-            >
-              <div className="flex items-center justify-between text-xs font-bold text-[#E21D2B]">
-                <span className="flex items-center gap-1.5">
-                  <ShieldAlert className="h-4 w-4 text-[#E21D2B]" />
-                  Emergency SOS
-                </span>
-                <span className="h-2 w-2 rounded-full bg-[#E21D2B] animate-ping" />
-              </div>
-              <p className="mt-1 text-[11px] text-[#E21D2B]/80 font-medium">
-                24/7 Safety Command Center, police dispatch & GPS broadcast.
-              </p>
-            </button>
-          </div>
-
-          {/* ACTIVE RIDE CARD */}
-          {activeRide ? (
-            <div className="rounded-xl border-2 border-[#E21D2B] bg-[#FFFFFF] p-6 shadow-md space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#E5E5E5]">
-                <div className="flex items-center gap-2">
-                  <span className="h-3 w-3 rounded-full bg-[#E21D2B] animate-ping" />
-                  <span className="text-xs font-black uppercase text-[#E21D2B]">ACTIVE RIDE IN PROGRESS</span>
-                  <span className="font-mono text-xs font-bold text-[#171717]">
-                    ({activeRide.reference_id || activeRide.id.slice(0, 8)})
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase ${
-                      activeRide.status === 'requested'
-                        ? 'bg-[#B45309]/10 text-[#B45309] border border-[#B45309]/30'
-                        : 'bg-[#15803D]/10 text-[#15803D] border border-[#15803D]/30'
-                    }`}
-                  >
-                    {activeRide.status === 'requested' && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                    {activeRide.status.replace('_', ' ')}
-                  </span>
-                </div>
-              </div>
-
-              {/* Status explanation */}
-              <div className="p-3 rounded-lg bg-[#FAFAFA] border border-[#E5E5E5] text-xs">
-                {activeRide.status === 'requested' && (
-                  <p className="text-[#B45309] font-medium flex items-center gap-1.5">
-                    <Loader2 className="h-4 w-4 animate-spin shrink-0" />
-                    Searching for the nearest verified driver. You will be notified instantly upon acceptance.
-                  </p>
-                )}
-                {activeRide.status === 'accepted' && (
-                  <p className="text-[#15803D] font-medium flex items-center gap-1.5">
-                    <CheckCircle2 className="h-4 w-4 shrink-0" />
-                    A driver has accepted your ride request and is preparing to navigate to pickup.
-                  </p>
-                )}
-                {activeRide.status === 'driver_arriving' && (
-                  <p className="text-[#171717] font-medium flex items-center gap-1.5">
-                    <Car className="h-4 w-4 text-[#E21D2B] shrink-0" />
-                    Your driver is en route to your pickup point. Please be ready at the curb.
-                  </p>
-                )}
-                {activeRide.status === 'driver_arrived' && (
-                  <p className="text-[#15803D] font-bold flex items-center gap-1.5">
-                    <MapPin className="h-4 w-4 text-[#15803D] shrink-0" />
-                    Your driver has arrived at the pickup location! Look for your cab.
-                  </p>
-                )}
-                {activeRide.status === 'ride_started' && (
-                  <p className="text-[#171717] font-medium flex items-center gap-1.5">
-                    <Shield className="h-4 w-4 text-[#15803D] shrink-0" />
-                    Trip in progress. Enjoy your smooth, safe ride with RideNova.
-                  </p>
-                )}
-              </div>
-
-              {/* Driver & Vehicle Details Card (when assigned) */}
-              {activeRide.status !== 'requested' && (
-                <div className="rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="h-12 w-12 rounded-full bg-[#FFF1F2] border border-[#E21D2B]/30 flex items-center justify-center font-bold text-base text-[#E21D2B] shrink-0">
-                      {activeRide.driver?.name?.charAt(0) || 'D'}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-sm text-[#171717]">
-                          {activeRide.driver?.name || 'Alex Sharma'}
-                        </span>
-                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#B45309]/10 text-[#B45309]">
-                          <Star className="h-3 w-3 fill-[#B45309]" />
-                          {activeRide.driver?.rating ? activeRide.driver.rating.toFixed(1) : '4.9'}
-                        </span>
-                      </div>
-                      <p className="text-xs text-[#737373] mt-0.5">
-                        {activeRide.driver?.vehicle
-                          ? `${activeRide.driver.vehicle.make} ${activeRide.driver.vehicle.model} · ${activeRide.driver.vehicle.color}`
-                          : 'Toyota Camry Hybrid · Pearl White'}
-                      </p>
-                      <span className="inline-block font-mono text-[11px] font-bold bg-white border border-[#E5E5E5] px-2 py-0.5 rounded text-[#171717] mt-1">
-                        Plate: {activeRide.driver?.vehicle?.registration_number || 'DL-01-RN-2026'}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 self-start sm:self-auto">
-                    <a
-                      href={`tel:${activeRide.driver?.phone || '+919876543210'}`}
-                      className="px-3.5 py-2 rounded-lg border border-[#E5E5E5] bg-white text-xs font-semibold text-[#171717] hover:border-[#E21D2B] transition-colors flex items-center gap-1.5 shadow-2xs"
-                    >
-                      <Phone className="h-3.5 w-3.5 text-[#15803D]" />
-                      <span>Call Driver</span>
-                    </a>
-                    <button
-                      type="button"
-                      onClick={() => setIsSosModalOpen(true)}
-                      className="px-3.5 py-2 rounded-lg bg-[#E21D2B]/10 border border-[#E21D2B]/40 text-xs font-bold text-[#E21D2B] hover:bg-[#E21D2B] hover:text-white transition-all flex items-center gap-1.5"
-                    >
-                      <ShieldAlert className="h-3.5 w-3.5" />
-                      <span>SOS Emergency</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Route Waypoints */}
-              <div className="space-y-2 text-xs">
-                <div className="flex items-start gap-2.5">
-                  <span className="h-2.5 w-2.5 rounded-full bg-[#15803D] mt-1 shrink-0" />
-                  <div>
-                    <span className="text-[10px] text-[#737373] block uppercase font-bold">Pickup</span>
-                    <span className="font-semibold text-[#171717]">{activeRide.pickup_address}</span>
-                  </div>
-                </div>
-
-                {activeRide.stops?.map((s) => (
-                  <div key={s.id} className="flex items-start gap-2.5 pl-3 border-l-2 border-[#B45309]">
-                    <span className="h-2 w-2 rounded-full bg-[#B45309] mt-1 shrink-0" />
-                    <div>
-                      <span className="text-[10px] text-[#737373] block uppercase font-bold">
-                        Stop #{s.stop_order}
-                      </span>
-                      <span className="text-[#171717]">{s.address}</span>
-                    </div>
-                  </div>
-                ))}
-
-                <div className="flex items-start gap-2.5">
-                  <span className="h-2.5 w-2.5 rounded-full bg-[#E21D2B] mt-1 shrink-0" />
-                  <div>
-                    <span className="text-[10px] text-[#737373] block uppercase font-bold">Destination</span>
-                    <span className="font-semibold text-[#171717]">{activeRide.destination_address}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Actions Footer */}
-              <div className="pt-3 border-t border-[#E5E5E5] flex flex-wrap items-center justify-between gap-3 text-xs">
-                <div className="flex items-center gap-3 text-[#737373]">
-                  <span>
-                    Category: <strong className="text-[#171717] uppercase">{activeRide.ride_type}</strong>
-                  </span>
-                  <span>·</span>
-                  <span>
-                    Distance: <strong>{activeRide.distance_km} km</strong>
-                  </span>
-                  <span>·</span>
-                  <span className="text-sm font-black text-[#E21D2B]">
-                    Est. Fare: ₹{activeRide.estimated_fare}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsSosModalOpen(true)}
-                    className="px-3 py-1.5 rounded-lg border border-[#E21D2B]/40 text-[#E21D2B] hover:bg-[#FFF1F2] font-bold transition-colors flex items-center gap-1"
-                  >
-                    <ShieldAlert className="h-3.5 w-3.5" />
-                    <span>SOS</span>
-                  </button>
-
-                  {['requested', 'accepted', 'driver_arriving'].includes(activeRide.status) && (
-                    <button
-                      onClick={() => handleCancelRide(activeRide.id)}
-                      disabled={actionLoading}
-                      className="px-3.5 py-1.5 rounded-lg border border-[#B91C1C]/30 text-[#B91C1C] hover:bg-[#B91C1C]/10 font-bold transition-colors"
-                    >
-                      Cancel Ride
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="rounded-xl border border-dashed border-[#E5E5E5] bg-[#FAFAFA] p-8 text-center">
-              <Car className="mx-auto h-10 w-10 text-[#737373] mb-2 opacity-50" />
-              <h3 className="text-sm font-bold text-[#171717]">Ready for your next journey?</h3>
-              <p className="mt-1 text-xs text-[#737373] max-w-sm mx-auto">
-                No active trip right now. Choose your destination, preview transparent pricing, and hail a cab in seconds.
-              </p>
-              <button
-                onClick={() => onNavigate('book-ride')}
-                className="mt-4 px-5 py-2.5 rounded-lg bg-[#E21D2B] hover:bg-[#BE1622] text-white text-xs font-bold transition-all shadow-md shadow-[#E21D2B]/20"
-              >
-                Book a Ride Now
-              </button>
-            </div>
-          )}
-
-          {/* Recent Rides Table Preview */}
-          <div className="rounded-xl border border-[#E5E5E5] bg-[#FFFFFF] p-5 shadow-sm">
-            <div className="flex items-center justify-between pb-3 border-b border-[#E5E5E5]">
-              <h3 className="text-sm font-bold text-[#171717]">Recent Trips</h3>
-              <button
-                onClick={() => setActiveTab('history')}
-                className="text-xs text-[#E21D2B] font-semibold hover:underline"
-              >
-                View All ({rides.length})
-              </button>
-            </div>
-
-            {loading ? (
-              <div className="py-8 text-center text-xs text-[#737373] flex items-center justify-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin text-[#E21D2B]" />
-                <span>Loading your trips...</span>
-              </div>
-            ) : rides.length === 0 ? (
-              <div className="py-8 text-center text-xs text-[#737373]">No past rides found in your account.</div>
-            ) : (
-              <div className="mt-3 divide-y divide-[#E5E5E5]">
-                {rides.slice(0, 5).map((r) => (
-                  <div key={r.id} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                    <div className="space-y-0.5 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-[11px] font-bold text-[#E21D2B]">
-                          {r.reference_id || r.id.slice(0, 8)}
-                        </span>
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold ${
-                            r.status === 'ride_completed'
-                              ? 'bg-[#15803D]/10 text-[#15803D]'
-                              : r.status === 'cancelled'
-                              ? 'bg-[#B91C1C]/10 text-[#B91C1C]'
-                              : 'bg-[#B45309]/10 text-[#B45309]'
-                          }`}
-                        >
-                          {r.status.replace('_', ' ')}
-                        </span>
-                        <span className="text-[10px] text-[#737373]">
-                          {new Date(r.created_at).toLocaleDateString()}
-                        </span>
-                      </div>
-                      <p className="truncate text-[#171717] font-medium">
-                        {r.pickup_address} → {r.destination_address}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
-                      <span className="font-bold text-sm text-[#171717]">₹{r.final_fare || r.estimated_fare}</span>
-
-                      {r.status === 'ride_completed' && (
-                        <>
-                          <button
-                            onClick={() => handleViewReceipt(r.id)}
-                            className="px-2.5 py-1 rounded border border-[#E5E5E5] text-[11px] font-medium text-[#171717] hover:border-[#E21D2B] transition-colors flex items-center gap-1"
-                          >
-                            <Receipt className="h-3 w-3 text-[#E21D2B]" />
-                            <span>Receipt</span>
-                          </button>
-
-                          <button
-                            onClick={() => {
-                              setReviewModalRide(r);
-                              setReviewRating(5);
-                              setReviewComment('');
-                            }}
-                            className="px-2.5 py-1 rounded bg-[#FAFAFA] border border-[#E5E5E5] text-[11px] font-medium text-[#171717] hover:border-[#B45309] transition-colors flex items-center gap-1"
-                          >
-                            <Star className="h-3 w-3 text-[#B45309]" />
-                            <span>Review</span>
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+        <CustomerHome 
+          onNavigate={onNavigate} 
+          activeRide={activeRide} 
+          onCancelRide={handleCancelRide} 
+          actionLoading={actionLoading}
+        />
       )}
+
 
       {/* TAB 2: RIDE HISTORY */}
       {activeTab === 'history' && (

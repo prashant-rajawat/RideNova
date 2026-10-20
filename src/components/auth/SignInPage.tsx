@@ -12,10 +12,12 @@ export const SignInPage: React.FC<SignInPageProps> = ({ onNavigate }) => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setInfoMessage(null);
     if (!email || !password) {
       setError('Please provide your email address and password.');
       return;
@@ -45,6 +47,7 @@ export const SignInPage: React.FC<SignInPageProps> = ({ onNavigate }) => {
   const handleGoogleSignIn = async () => {
     setLoading(true);
     setError(null);
+    setInfoMessage(null);
     try {
       await devSimulateLogin('rider', 'Google User', 'google.user@example.com');
       onNavigate('rider');
@@ -76,6 +79,14 @@ export const SignInPage: React.FC<SignInPageProps> = ({ onNavigate }) => {
           <div className="mt-5 flex items-center gap-2 rounded-lg border border-[#B91C1C]/30 bg-[#B91C1C]/10 p-3 text-xs text-[#B91C1C]">
             <AlertCircle className="h-4 w-4 shrink-0" />
             <span>{error}</span>
+          </div>
+        )}
+
+        {/* Info notification */}
+        {infoMessage && (
+          <div className="mt-5 flex items-center gap-2 rounded-lg border border-[#15803D]/30 bg-[#DCFCE7] p-3 text-xs text-[#15803D]">
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            <span>{infoMessage}</span>
           </div>
         )}
 
@@ -137,7 +148,7 @@ export const SignInPage: React.FC<SignInPageProps> = ({ onNavigate }) => {
               </label>
               <button
                 type="button"
-                onClick={() => alert('Password reset link has been sent to your email address.')}
+                onClick={() => setInfoMessage('Password reset instructions have been sent to your email address.')}
                 className="text-[11px] text-[#E21D2B] hover:underline cursor-pointer bg-transparent border-none p-0"
               >
                 Forgot password?

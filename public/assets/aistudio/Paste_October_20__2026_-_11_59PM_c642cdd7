@@ -1,0 +1,779 @@
+# RIDENOVA MASTER FIX PROMPT — RIDE REQUEST LIFECYCLE, REAL-TIME ACCEPTANCE, 5-MINUTE TIMER, FARE INCREASE, AND PERSISTENT ADMIN-APPROVED DRIVER VERIFICATION
+
+## PRIMARY OBJECTIVE
+
+Fix the existing RideNova application by implementing the missing ride-request features and correcting the driver-verification workflow. The current application displays “Ride Requested Successfully” and “Searching for a driver... (requested),” but the customer cannot see a countdown timer, cannot increase the offered fare, and does not receive real-time notifications when a driver accepts a ride. The customer must refresh the page to see the updated status. In addition, drivers are automatically approved after submitting their documents, without an actual admin approval process, and previously saved driver approval statuses do not reliably persist across code updates, refreshes, or redeployments.
+
+These are functional defects, not merely design issues. Implement actual working changes across the existing React frontend, Express backend, PostgreSQL/Supabase database, Clerk authentication, and Supabase Realtime integration.
+
+**Do not return only an audit, explanation, plan, or list of suggested changes. Modify the actual existing project files, implement the features, run the relevant tests, and verify the results.**
+
+## 1. PROTECT ALL EXISTING FUNCTIONALITY
+
+Before changing code, inspect the current project structure and identify the existing implementations for:
+
+- Customer ride booking and the ride confirmation page.
+- Ride creation, acceptance, cancellation, and status transitions.
+- Driver ride requests and active-trip controls.
+- Driver availability and online/offline status.
+- Driver profile, KYC documents, and approval status.
+- Admin driver-partner management and approval controls.
+- PostgreSQL schema, existing migrations, and migration runner.
+- Clerk authentication and server-side authorization.
+- Supabase Realtime subscriptions and database policies.
+- Existing API routes, API client functions, and UI components.
+- Existing payment processing and fare calculations.
+
+Reuse the current architecture and established conventions. Do not create a parallel ride system, duplicate API routes, duplicate database tables, or a second authentication system.
+
+Make small, targeted, backward-compatible changes. Preserve existing customer accounts, driver accounts, ride records, approval statuses, notification records, payment records, and other production data.
+
+Never reset the production database, drop tables, delete existing records, overwrite production data with seed data, or automatically re-submit approved drivers for approval.
+
+Do not claim that a feature works simply because the code compiles.
+
+## 2. FIX THE CUSTOMER RIDE REQUEST SCREEN
+
+Redesign the existing ride-request confirmation screen using RideNova's white, red, and black theme.
+
+Use:
+- White background: #FFFFFF.
+- Primary red: #E21D2B.
+- Dark red: #BE1622.
+- Black text: #171717.
+- Secondary text: #737373.
+- Borders: #E5E5E5.
+- Soft red backgrounds: #FFF1F2.
+
+Use consistent typography, spacing, responsive layouts, accessible buttons, professional icons, clear status indicators, and polished loading and error states.
+
+Keep the existing pickup, destination, intermediate stops, selected vehicle category, estimated fare, estimated distance, estimated duration, and ride reference number.
+
+The confirmation screen must not remain a static success page while the underlying ride changes. It must act as a live ride-request tracking screen.
+
+### Required customer screen states
+
+1. Request submitted and awaiting a driver.
+2. Driver acceptance received.
+3. Driver details available.
+4. Driver travelling to pickup.
+5. Driver arrived at pickup.
+6. OTP verification required.
+7. Trip in progress.
+8. Trip completed.
+9. Ride cancelled by the customer.
+10. Ride cancelled by the driver, where permitted.
+11. Request expired because no driver accepted within five minutes.
+12. Temporary network disconnection and reconnection.
+
+Render the correct state based on the authoritative ride record returned by the backend.
+
+Do not display “Searching for a driver” after the ride has been accepted, expired, or cancelled.
+
+Show clear, professional notifications when the ride state changes. Do not force customers to refresh the page.
+
+## 3. IMPLEMENT A REAL FIVE-MINUTE COUNTDOWN TIMER
+
+Every newly created on-demand ride request must have a five-minute acceptance window.
+
+When the backend successfully creates a ride request, save an authoritative request creation timestamp and acceptance deadline. The acceptance deadline must be exactly five minutes after the server-authoritative creation time.
+
+Persist appropriate fields using the existing schema where possible. If necessary, add a backward-compatible migration for fields such as:
+
+- request_created_at
+- acceptance_deadline
+- accepted_at
+- expired_at
+
+Use the project's existing naming conventions and types instead of adding duplicate columns.
+
+### Countdown UI
+
+On the customer ride-request screen, show a prominent countdown, for example:
+
+“Finding your driver”
+
+“Request expires in 04:59”
+
+Display a live countdown in MM:SS format, decreasing every second:
+
+05:00 → 04:59 → 04:58 → 04:57 → ... → 00:01 → 00:00.
+
+Use a visually polished timer card with a subtle progress indicator. Make the timer readable on mobile, tablet, and desktop.
+
+Use the persisted server deadline to calculate remaining time. Do not rely exclusively on a frontend setInterval, a component mount time, browser local storage, or a hard-coded five-minute animation. A refreshed browser must restore the correct remaining time instead of restarting the timer.
+
+Clean up intervals and event subscriptions when components unmount.
+
+### Automatic expiration
+
+If no driver has accepted the request before the acceptance deadline:
+
+- The backend must transition the ride to an expired or cancelled status according to the existing status model.
+- Persist the expiration timestamp and final status.
+- Stop sending the request to available drivers.
+- Remove the expired request from eligible driver request lists.
+- Notify the customer immediately.
+- Display a professional message explaining that no driver accepted the request within five minutes.
+- Offer a “Book Another Ride” action.
+- Prevent the expired request from being accepted afterward.
+
+Use a reliable server-side expiration mechanism, such as a database-backed expiration worker or an existing scheduled processing mechanism. The backend must enforce expiration even when the customer closes the browser.
+
+If the project does not have a background worker, implement a safe mechanism compatible with the existing deployment architecture and document how it runs in production. Do not depend solely on a browser timer to cancel requests.
+
+### Race-condition protection
+
+A driver acceptance and request expiration may happen at nearly the same time. Implement atomic, database-backed state transitions.
+
+Only one valid outcome may win:
+
+- A driver accepts before the deadline and the ride becomes accepted; or
+- The deadline passes before acceptance and the request becomes expired.
+
+An expired request must never become accepted afterward. A cancelled request must never be resurrected by an old request or event.
+
+Use database transactions, conditional updates, row locking, or an equivalent safe concurrency mechanism appropriate to the current schema.
+
+## 4. ADD A FUNCTIONAL FARE-INCREASE FEATURE
+
+Customers must be able to increase the offered fare while an on-demand ride is still searching for a driver.
+
+The customer interface must contain clearly visible buttons:
+
+- “+ ₹100”
+- “+ ₹500”
+- “+ ₹1,000”
+
+Use a professional fare-adjustment card that shows:
+
+- Original estimated fare.
+- Current offered fare.
+- Total additional amount offered.
+- The available increase options.
+- A clear confirmation state after the increase succeeds.
+
+Example:
+
+Original offered fare: ₹1,000
+
+Customer selects “+ ₹500”
+
+Updated offered fare: ₹1,500
+
+The screen should display “New offer: ₹1,500” after the backend confirms the update.
+
+### Backend requirements
+
+Implement a protected endpoint or extend the existing ride-update endpoint to increase the offered fare.
+
+The backend must:
+
+1. Authenticate the customer through the existing Clerk integration.
+2. Verify that the customer owns the ride.
+3. Verify that the ride is still in the eligible requested/searching state.
+4. Verify that the acceptance deadline has not passed.
+5. Validate the requested increment against the allowed values.
+6. Calculate the new offered fare from the authoritative existing amount.
+7. Persist the change atomically.
+8. Record the fare adjustment in an auditable way.
+9. Publish the updated ride information to eligible drivers.
+10. Return the confirmed updated fare to the customer.
+
+Never trust a new fare total supplied directly by the browser. The server must calculate the total from the existing stored fare and validated increment.
+
+Use appropriate integer paise or another consistent monetary representation to avoid floating-point rounding errors.
+
+Prevent duplicate increments caused by double-clicks, network retries, or repeated requests. Use idempotency protection or an equivalent reliable operation design.
+
+### Driver notifications
+
+When the offered fare increases, update the eligible driver request cards immediately.
+
+For example:
+
+“Fare increased”
+
+“Updated offer: ₹1,500”
+
+Show the updated offer clearly so drivers can make an informed decision.
+
+Notify only eligible drivers who can actually accept the request. Do not send stale requests to drivers who are offline, unapproved, already committed to an active trip, or otherwise ineligible.
+
+Do not falsely describe a fare increase as a guaranteed payment bonus. Clearly distinguish the customer’s updated offer from the final fare and the driver's eventual earnings.
+
+### Fare integrity
+
+Integrate the new offer with the existing fare calculation and commission logic.
+
+Define and enforce a consistent rule for how an accepted offer affects the final fare. After a driver accepts, freeze the accepted offer unless the existing system explicitly supports further authorized changes.
+
+The final amount charged must be calculated and validated by the backend. Never silently charge a customer a higher amount than the confirmed applicable fare.
+
+Do not trigger Stripe or any other payment automatically when the fare is increased or the driver accepts the request.
+
+## 5. FIX REAL-TIME DRIVER ACCEPTANCE ON THE CUSTOMER SCREEN
+
+This is one of the most important bugs.
+
+Currently, the driver accepts the ride, but the customer continues to see “Searching for a driver.” The customer has to refresh the page to discover that a driver has accepted.
+
+This must be fixed completely.
+
+### Required real-time flow
+
+1. A customer creates a ride request.
+2. The backend saves the request in PostgreSQL.
+3. Eligible drivers receive the new request.
+4. A driver accepts the request.
+5. The backend verifies eligibility and atomically assigns the ride.
+6. The backend commits the accepted ride and assigned-driver information.
+7. After the transaction commits, publish the updated ride event.
+8. The customer's active ride screen receives the event without a refresh.
+9. The customer sees a professional acceptance notification and the driver's real details.
+10. The customer screen updates its status and action buttons immediately.
+
+Use the existing Supabase Realtime implementation where appropriate. Correct the subscription channel, filters, authentication, database publication, policies, and cleanup logic as required.
+
+The event must be published only after the database transaction commits. Never notify the customer that a driver has accepted before the assignment has actually been saved.
+
+### Customer acceptance notification
+
+Display a polished modal, notification card, or accessible toast with a subtle entrance animation.
+
+Example:
+
+“Your driver has been assigned!”
+
+Show the following information when available from the verified assigned-driver record:
+
+- Driver's display name.
+- Driver's profile photograph.
+- Vehicle make and model.
+- Vehicle category.
+- Vehicle registration number.
+- Relevant driver rating, if real rating data exists.
+- Estimated arrival time, if it can be calculated reliably.
+- Ride reference number.
+- Current trip status.
+
+Include a clearly labelled “Got it” or close button. Closing the modal must not cancel the ride or remove the assigned-driver information.
+
+The acceptance notification must not be shown repeatedly because of duplicate realtime events, reconnects, or browser refreshes. Persist enough state or derive the notification from the ride transition to avoid repeated pop-ups.
+
+If a driver photograph or optional detail is unavailable, use a professional placeholder and omit unsupported information. Never fabricate a driver's identity, vehicle details, rating, or ETA.
+
+### Reconnection and fallback
+
+Realtime events are not guaranteed to arrive in every network condition.
+
+Implement a resilient fallback that periodically fetches the authoritative ride status while the ride is active, using a reasonable interval and stopping when no longer needed.
+
+When connectivity returns, refresh the current ride state from the backend.
+
+Ensure that the customer receives the latest accepted, cancelled, expired, and in-progress state even if a realtime event was missed.
+
+Do not create duplicate rides or duplicate notifications during reconnection.
+
+## 6. MAKE RIDE ACCEPTANCE SAFE AND EXCLUSIVE
+
+Multiple drivers must not be able to accept the same ride.
+
+The backend must verify that the driver:
+
+- Is authenticated.
+- Has an approved driver-partner status.
+- Is eligible to go online.
+- Is currently available.
+- Has no conflicting active on-demand ride.
+- Meets any existing vehicle or ride-category requirements.
+- Is accepting before the request expires.
+- Is accepting a ride that has not already been assigned, cancelled, or expired.
+
+Implement atomic acceptance in the database.
+
+If two drivers attempt to accept the same ride simultaneously, exactly one may succeed. The other must receive a clear conflict response, and the request must disappear from their eligible request list.
+
+Return meaningful HTTP status codes and user-readable error messages.
+
+Never rely on frontend button disabling alone to prevent duplicate acceptance.
+
+## 7. IMPLEMENT A COMPLETE ADMIN-CONTROLLED DRIVER APPROVAL WORKFLOW
+
+Driver verification must never be automatically approved merely because a driver submits documents.
+
+Submitting documents and being approved are two different actions.
+
+Create or repair the full process across the driver portal, backend, database, and admin console.
+
+### Driver application states
+
+Use the existing status model where possible. The workflow should support:
+
+- NOT_SUBMITTED
+- PENDING_REVIEW
+- APPROVED
+- REJECTED
+- RESUBMISSION_REQUIRED
+
+Map these conceptual states to the existing database enum or status values instead of introducing conflicting status systems.
+
+### Driver document submission
+
+When a driver submits or updates their required documents:
+
+1. Authenticate the driver.
+2. Validate required fields and uploaded document references.
+3. Save the document references and submitted application data.
+4. Persist the application status as pending review when appropriate.
+5. Save a submission timestamp.
+6. Save the reviewing admin and review timestamp only when a review occurs.
+7. Notify the driver that the application is awaiting review.
+8. Add the application to the real admin approval queue.
+9. Do not enable online status or ride acceptance while approval is pending.
+
+Display a professional driver-facing status panel:
+
+“Application submitted successfully”
+
+“Your documents are awaiting admin review.”
+
+“You will be able to go online after approval.”
+
+Show the submission date, the current status, and any missing or rejected document requirements.
+
+Do not make the driver resubmit the entire application just because the page refreshed or the application was reopened.
+
+### Admin approval queue
+
+Repair the existing admin console rather than building an unrelated administration system.
+
+The queue must display real database records for pending driver applications.
+
+For each application, provide:
+
+- Driver's name and account identifier.
+- Application submission date.
+- Document checklist.
+- Document review links or secure previews.
+- Vehicle information.
+- License and registration details, where collected.
+- Current application status.
+- Approve action.
+- Reject action with a required reason.
+- Request-resubmission action with a clear explanation.
+- Review history and timestamps.
+
+Use confirmation dialogs for consequential actions.
+
+Every button must perform a real API operation and provide visible loading, success, and failure feedback.
+
+### Secure admin authorization
+
+Enforce admin authorization on the backend for every approval, rejection, and review endpoint.
+
+Do not rely on hiding admin buttons in the frontend.
+
+Verify the authenticated Clerk user and their trusted server-side role or authorized role mapping. Prevent drivers and customers from approving themselves by modifying browser state or API payloads.
+
+Do not accept an arbitrary role or approval status supplied by the client.
+
+Only an authorized administrator may change a pending application to approved or rejected.
+
+Record who performed the review and when. Maintain an audit trail appropriate to the existing application.
+
+### Approved drivers
+
+Once an admin approves a driver:
+
+- Persist the approval in the database.
+- Save the review timestamp and reviewing admin identifier.
+- Update the driver-facing status.
+- Permit the driver to go online only if all other existing eligibility requirements are satisfied.
+- Allow eligible ride requests to be received and accepted.
+
+An approved driver must remain approved across page refreshes, sign-outs and sign-ins, server restarts, redeployments, and unrelated feature updates.
+
+Do not change APPROVED back to PENDING_REVIEW during startup, Clerk profile synchronization, driver profile updates, database seeding, document updates unrelated to approval, or normal application initialization.
+
+If a previously approved driver submits updated documents, apply an explicit, documented re-verification policy. Do not silently revoke approval merely because a profile field changed. If re-verification is required for a specific critical document, represent that transition intentionally and explain the restriction to the driver.
+
+### Rejected or resubmission-required drivers
+
+Persist the rejection or resubmission status and the administrator's reason.
+
+Show the reason to the driver.
+
+Allow the driver to update the relevant documents and resubmit through a deliberate workflow.
+
+Do not automatically approve a resubmission. It must return to the admin review queue.
+
+## 8. ENFORCE APPROVAL BEFORE ONLINE STATUS
+
+The backend must be the source of truth for driver availability.
+
+An unapproved driver must not be able to become online, receive eligible ride requests, or accept rides.
+
+If a pending or rejected driver attempts to go online:
+
+- Reject the API request.
+- Keep the persisted online status false.
+- Display a professional explanation.
+- Provide a link to the driver's verification status.
+
+Example:
+
+“Admin approval required”
+
+“Your driver application is still under review. You can go online once an administrator approves your application.”
+
+The online/offline UI must reflect the backend response, not just update a local React state variable.
+
+Prevent unauthorized direct API requests from changing driver availability.
+
+When an approved driver becomes unavailable for a valid reason, update the persisted status and remove the driver from eligible dispatch results.
+
+Do not interfere with an active-trip restriction already implemented in the project. An active on-demand trip must not be abandoned by switching offline. Future scheduled rides should follow the existing scheduling rules and should not unnecessarily force the driver to stay online continuously.
+
+## 9. MAKE DRIVER APPROVAL PERSISTENT ACROSS REDEPLOYMENTS
+
+Investigate and eliminate the root cause of approval status resetting.
+
+Inspect:
+
+- Application startup initialization.
+- Seed scripts.
+- Upsert operations.
+- Default values applied during profile creation.
+- Clerk user synchronization.
+- Driver profile save operations.
+- KYC submission handlers.
+- Migration scripts.
+- Admin review endpoints.
+- Database reads and writes.
+- Any in-memory fallback data store.
+
+Ensure that existing production records are loaded and updated safely.
+
+Never replace existing approval values with default pending values simply because a profile is loaded or synchronized.
+
+Use explicit database updates that modify only the intended fields.
+
+For example, updating a phone number must not overwrite the approval status. Updating vehicle information must not overwrite the admin's review decision. Updating a profile photo must not reset the KYC application.
+
+Do not use hardcoded approved drivers or fake driver records.
+
+Do not claim that PostgreSQL is being used unless the production request path actually reads and writes to the configured database.
+
+If the application falls back to in-memory storage when the production database is unavailable, prevent that behavior from silently appearing successful in production. Fail safely and provide a clear operational error rather than reporting a successful save that will disappear after restart.
+
+## 10. REPAIR DATABASE MIGRATIONS SAFELY
+
+Inspect the current migration runner, schema, and existing tables before making changes.
+
+Use additive migrations wherever possible.
+
+If new fields or indexes are needed, create a new migration with a unique version and ensure the existing migration runner executes it safely.
+
+Do not edit historical migrations that have already been applied in production unless the project's migration strategy explicitly requires and safely handles that change.
+
+Do not drop or recreate the rides, drivers, users, driver documents, payments, notifications, or related tables.
+
+Preserve existing records.
+
+Add appropriate database constraints, indexes, timestamps, and relationships where needed.
+
+Make migration execution idempotent according to the project's existing migration conventions.
+
+Verify the actual production database migration state. Do not assume the dashboard is synchronized merely because the frontend displays sample data.
+
+## 11. FIX CANCELLATION AND RIDE STATE TRANSITIONS
+
+Inspect all existing customer and driver cancellation controls.
+
+Every cancellation button must trigger a real API request and show:
+
+- Loading state.
+- Successful cancellation confirmation.
+- A clear explanation when cancellation is not allowed.
+- A retryable error message when an operation fails.
+
+Enforce cancellation permissions on the backend.
+
+A customer must not cancel another customer's ride. A driver must not cancel a ride assigned to someone else. Expired or completed rides must not be cancelled as if they were still active.
+
+Respect existing business rules for cancellation fees and active trips. Do not invent charges or automatically initiate a payment.
+
+Ensure cancellation updates the database, customer UI, driver UI, request dispatch list, and relevant notifications consistently.
+
+Use valid state transitions. A stale browser tab must not overwrite a newer state with an older one.
+
+## 12. BUILD A RELIABLE RIDE STATUS MODEL
+
+Review the existing status values before modifying them.
+
+Use the existing state model where possible to represent these lifecycle stages:
+
+REQUESTED → ACCEPTED → EN_ROUTE_TO_PICKUP → ARRIVED_AT_PICKUP → IN_PROGRESS → COMPLETED
+
+Handle cancellation and expiration as valid terminal outcomes.
+
+If the current database uses different names, create a clear mapping rather than introducing duplicate or incompatible statuses.
+
+The backend must validate each transition.
+
+For example:
+
+- A requested ride can be accepted only once and before expiration.
+- A driver cannot start a trip before acceptance and required OTP verification.
+- A completed ride cannot return to requested.
+- An expired request cannot be accepted.
+- A cancelled ride cannot become active again.
+- Payment status must not be confused with ride status.
+
+All customer and driver screens must display the current authoritative status.
+
+## 13. OTP VERIFICATION BEFORE STARTING A TRIP
+
+Inspect and preserve any existing OTP functionality. If it is missing or incomplete, implement it as part of the ride lifecycle.
+
+Generate a secure, short-lived trip-start OTP when appropriate, after a driver is assigned.
+
+Associate it with the correct ride and customer.
+
+The customer should be able to view the OTP in the authenticated ride details screen. Do not expose the OTP to unrelated drivers, other customers, public APIs, or unauthenticated users.
+
+The driver must enter the OTP in the assigned ride's trip console.
+
+The backend must validate the OTP against the correct ride, enforce expiration and attempt limits, and mark it as used after successful verification.
+
+Only the assigned driver may submit verification for that ride.
+
+A successful OTP verification is required before the trip can transition to IN_PROGRESS.
+
+An invalid OTP must return a clear error and must not start the trip.
+
+Prevent replay and reuse of a previously consumed OTP. Do not store sensitive OTP values in publicly readable records or unnecessary logs.
+
+Do not use a hardcoded OTP or accept any arbitrary four-digit number.
+
+Do not mark a trip completed or initiate payment merely because an OTP is verified. OTP verification authorizes the trip-start transition only.
+
+## 14. CUSTOMER AND DRIVER NOTIFICATIONS
+
+Use the existing notification infrastructure and realtime mechanisms.
+
+Create meaningful notifications for:
+
+- Ride request submitted.
+- Fare offer increased.
+- Driver assigned.
+- Driver approaching pickup, when supported.
+- Driver arrived at pickup.
+- OTP verification required.
+- Trip started.
+- Trip completed.
+- Ride cancelled.
+- Request expired.
+- Driver application submitted.
+- Driver application approved.
+- Driver application rejected or resubmission requested.
+
+Persist important notifications when appropriate and mark them read only through a successful, authenticated operation.
+
+Avoid creating duplicate notifications when a webhook, retry, realtime reconnect, or repeated API request occurs.
+
+The frontend must show important ride events immediately while the application is open.
+
+Use accessible modal, toast, or notification components consistent with the RideNova design system.
+
+## 15. FRONTEND QUALITY AND USER EXPERIENCE
+
+UI/UX is the first priority, but visual improvements must never break existing functionality.
+
+Ensure that every changed screen looks professional, consistent, and complete.
+
+Requirements:
+
+- Responsive mobile, tablet, and desktop layouts.
+- Consistent headings, font sizes, spacing, borders, and button heights.
+- Clear loading, disabled, success, error, and empty states.
+- No dead buttons.
+- No fake success messages.
+- No endless loading spinners without timeout or explanation.
+- No unnecessary full-page refreshes.
+- No duplicate navigation or duplicate ride cards.
+- No raw API errors displayed to users.
+- No hardcoded driver details or fabricated approval results.
+- Proper keyboard interaction and accessible modal behavior.
+- Reduced-motion support for animations.
+- Clear visual separation between searching, accepted, and in-progress states.
+
+Use reusable components for the countdown, fare adjustment, driver-assignment notification, application status, and loading/error feedback where this fits the existing architecture.
+
+Do not rewrite the entire application or replace working pages with mockups just to improve appearance.
+
+## 16. API SECURITY AND ERROR HANDLING
+
+Authenticate all protected endpoints using the existing Clerk integration.
+
+Authorize access to each ride, driver application, and admin operation on the backend.
+
+Validate request bodies and parameters. Use the project's established validation library if one already exists.
+
+Return consistent error responses with suitable HTTP status codes.
+
+Do not expose secrets, internal stack traces, other customers' data, private driver documents, or sensitive authentication information.
+
+Apply rate limiting where appropriate for sensitive operations such as OTP verification and repeated fare updates.
+
+Ensure that retrying a request cannot create duplicate rides, double-increment the fare, approve the same application multiple times with inconsistent results, or create duplicate notifications.
+
+## 17. REQUIRED TESTING
+
+Do not stop after changing files or running a successful build.
+
+Create or update automated tests using the project's existing test framework.
+
+At minimum, test these scenarios:
+
+### Countdown tests
+
+1. A new on-demand ride receives a five-minute deadline.
+2. The customer sees a decreasing MM:SS countdown.
+3. Refreshing the page does not restart the timer.
+4. A request expires when its deadline passes without acceptance.
+5. An expired request disappears from eligible driver requests.
+6. An expired request cannot be accepted.
+7. A valid acceptance before the deadline prevents expiration.
+
+### Fare adjustment tests
+
+1. The customer can add ₹100.
+2. The customer can add ₹500.
+3. The customer can add ₹1,000.
+4. The displayed total matches the backend-confirmed amount.
+5. Invalid increments are rejected.
+6. Another customer cannot increase the fare.
+7. Fare increases are rejected after acceptance, cancellation, or expiration.
+8. Duplicate requests do not accidentally increase the fare twice.
+9. Eligible drivers receive the updated offer.
+
+### Real-time acceptance tests
+
+1. The driver accepts a pending ride.
+2. The customer receives the updated status without refreshing.
+3. The assignment notification displays the correct driver information.
+4. Closing the notification does not cancel the ride.
+5. Reconnecting after a network interruption restores the correct state.
+6. Duplicate events do not create duplicate notifications.
+7. Two drivers cannot accept the same ride.
+
+### Driver approval tests
+
+1. A new driver starts in pending review.
+2. Document submission does not automatically approve the driver.
+3. The pending application appears in the admin queue.
+4. A non-admin cannot approve a driver through the API.
+5. An admin can approve a pending driver.
+6. An admin can reject a driver with a reason.
+7. A driver cannot go online before approval.
+8. An approved driver can go online when otherwise eligible.
+9. Refreshing, signing out, and signing back in preserve the approval.
+10. Updating a profile or vehicle field does not reset approval.
+11. Application restart and redeployment do not reset approval.
+12. Resubmitted documents do not automatically approve a rejected application.
+
+### Cancellation and OTP tests
+
+1. A valid cancellation updates the database and both relevant screens.
+2. An invalid cancellation produces a meaningful error.
+3. A driver cannot cancel another driver's trip.
+4. An incorrect OTP does not start a trip.
+5. A valid OTP permits the assigned driver to start the trip.
+6. An expired or reused OTP is rejected.
+7. Payment is not automatically triggered by driver arrival or OTP verification.
+
+Run the existing relevant tests as well. Do not remove or weaken existing tests to make the new changes pass.
+
+## 18. END-TO-END VERIFICATION
+
+Verify the actual application flow with separate authenticated customer, driver, and admin accounts.
+
+Use the following sequence:
+
+1. Submit a ride as the customer.
+2. Confirm that the customer sees a five-minute countdown.
+3. Confirm that an eligible driver sees the request.
+4. Increase the offer by ₹100 and verify the updated amount.
+5. Confirm that the driver sees the updated offer.
+6. Accept the request from the driver account.
+7. Verify that the customer receives the live assignment notification without refreshing.
+8. Verify that the displayed driver and vehicle details match the database.
+9. Verify that another driver cannot accept the same ride.
+10. Verify the OTP requirement before trip start.
+11. Verify cancellation and expiration behavior.
+12. Submit driver documents from a pending driver account.
+13. Confirm that the application appears in the admin review queue.
+14. Confirm that the driver remains offline before approval.
+15. Approve the driver from the admin account.
+16. Confirm that the approved status persists after refresh and a backend restart.
+17. Confirm that unrelated customer, driver, admin, payment, promo-code, notification, and dashboard features still work.
+
+If an external service or unavailable test environment prevents a specific test, clearly identify that limitation instead of claiming the test passed.
+
+## 19. DEPLOYMENT AND PRODUCTION READINESS
+
+Keep the current deployment architecture intact unless a change is necessary and justified.
+
+Check the frontend and backend builds separately.
+
+Verify that all new environment requirements are documented. Do not expose server-side secrets through Vite variables or frontend bundles.
+
+If a background expiration worker is required, document how it is started and monitored in the deployed environment.
+
+Verify that realtime subscriptions and database policies allow the correct authenticated users to receive permitted updates without exposing another customer's ride details or private driver information.
+
+Use safe logging for ride lifecycle transitions and approval actions.
+
+Do not include real authentication credentials, private keys, or sensitive customer information in logs or generated reports.
+
+## 20. FINAL DELIVERY REPORT
+
+After implementing the changes, provide a concise but precise report containing:
+
+1. The actual root causes found for each reported defect.
+2. The files changed and why.
+3. The database migration added, if any.
+4. The API routes added or modified.
+5. How the five-minute timer is enforced on the server.
+6. How fare increases are persisted and broadcast to eligible drivers.
+7. How real-time customer acceptance notifications work.
+8. How driver approval is enforced and persisted.
+9. The tests actually executed and their results.
+10. Frontend build result.
+11. Backend build result.
+12. Any deployment configuration still required.
+13. Any remaining issue that could not be verified.
+
+Clearly distinguish implemented, tested, and deployment-dependent work.
+
+Do not report success for a feature that has only been written but not verified.
+
+## NON-NEGOTIABLE RULES
+
+- Make real code changes, not just recommendations.
+- Do not leave placeholder buttons or incomplete modal forms.
+- Do not use fake data to simulate successful functionality.
+- Do not auto-approve drivers.
+- Do not restart the five-minute timer on refresh.
+- Do not require a customer to refresh to discover driver acceptance.
+- Do not allow expired rides to be accepted.
+- Do not trust client-supplied fare totals, approval status, user roles, or ride ownership.
+- Do not overwrite previously approved driver records.
+- Do not reset the database.
+- Do not break existing working features to implement the new ones.
+- Do not claim that everything is complete if tests have not been run.
+- If the project reaches a quota limit, preserve the current checkpoint and report precisely what remains.
+
+**Start by inspecting the existing implementation and identifying the real causes of these defects. Then implement the fixes in small, safe steps, test each change, and verify the complete customer-driver-admin workflow. The final result must be a genuinely functional RideNova application, not merely a redesigned screenshot.**

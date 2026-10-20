@@ -5,7 +5,7 @@
  * Step 3: Google Maps + Route Planning + Fare Estimation + Ride Booking (Completed)
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Car,
   Shield,
@@ -38,6 +38,7 @@ import { AccessDeniedPage } from './components/auth/AccessDeniedPage.tsx';
 import { AuthTestingPanel } from './components/auth/AuthTestingPanel.tsx';
 import { BookingPage } from './components/booking/BookingPage.tsx';
 import { LandingPage } from './components/LandingPage.tsx';
+import { SplashScreen } from './components/auth/SplashScreen.tsx';
 import { useHealth } from './hooks/useHealth.ts';
 import { useAuthSession } from './context/AuthContext.tsx';
 
@@ -54,6 +55,20 @@ export default function App() {
   const [attemptedRole, setAttemptedRole] = useState<string>('');
   const [isSchemaModalOpen, setIsSchemaModalOpen] = useState(false);
 
+  useEffect(() => {
+    if (authLoading) return;
+
+    if (isAuthenticated) {
+      if (['home', 'sign-in', 'sign-up'].includes(currentRoute)) {
+        handleNavigate(user?.role === 'admin' ? 'admin' : user?.role === 'driver' ? 'driver' : 'rider');
+      }
+    } else {
+      if (['home', 'admin', 'driver', 'rider', 'book-ride', 'profile'].includes(currentRoute)) {
+        handleNavigate('sign-in');
+      }
+    }
+  }, [isAuthenticated, authLoading, currentRoute]);
+
   const scrollToSection = (id: string) => {
     const el = document.getElementById(id);
     if (el) {
@@ -61,9 +76,6 @@ export default function App() {
     }
   };
 
-  /**
-   * Safe Route Navigation with Declarative Route State
-   */
   const handleNavigate = (targetRoute: string) => {
     try {
       sessionStorage.setItem('ridenova_route', targetRoute);
@@ -73,6 +85,10 @@ export default function App() {
     setCurrentRoute(targetRoute);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  if (authLoading) {
+    return <SplashScreen />;
+  }
 
   const coreTablesSummary = [
     { name: 'users', role: 'Riders, Drivers & Admins profile mapping (Clerk)', count: '9 fields', pKey: 'UUID' },
@@ -104,15 +120,10 @@ export default function App() {
         {currentRoute === 'home' && <LandingPage onNavigate={handleNavigate} />}
         {currentRoute === 'sign-in' && <SignInPage onNavigate={handleNavigate} />}
         {currentRoute === 'sign-up' && <SignUpPage onNavigate={handleNavigate} />}
-
+        
         {/* Protected Admin Route */}
         {currentRoute === 'admin' && (
-          authLoading ? (
-            <div className="min-h-[60vh] flex flex-col items-center justify-center gap-3">
-              <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#E21D2B] border-t-transparent" />
-              <p className="text-xs font-semibold text-[#737373]">Verifying administrator credentials...</p>
-            </div>
-          ) : !isAuthenticated ? (
+          !isAuthenticated ? (
             <SignInPage onNavigate={handleNavigate} />
           ) : user?.role !== 'admin' ? (
             <AccessDeniedPage attemptedRole="admin" onNavigate={handleNavigate} />
@@ -123,12 +134,7 @@ export default function App() {
 
         {/* Protected Driver Route */}
         {currentRoute === 'driver' && (
-          authLoading ? (
-            <div className="min-h-[60vh] flex flex-col items-center justify-center gap-3">
-              <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#E21D2B] border-t-transparent" />
-              <p className="text-xs font-semibold text-[#737373]">Loading Driver Partner console...</p>
-            </div>
-          ) : !isAuthenticated ? (
+          !isAuthenticated ? (
             <SignInPage onNavigate={handleNavigate} />
           ) : user?.role !== 'driver' && user?.role !== 'admin' ? (
             <AccessDeniedPage attemptedRole="driver" onNavigate={handleNavigate} />
@@ -139,12 +145,7 @@ export default function App() {
 
         {/* Protected Rider / Customer Route */}
         {currentRoute === 'rider' && (
-          authLoading ? (
-            <div className="min-h-[60vh] flex flex-col items-center justify-center gap-3">
-              <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#E21D2B] border-t-transparent" />
-              <p className="text-xs font-semibold text-[#737373]">Loading Customer dashboard...</p>
-            </div>
-          ) : !isAuthenticated ? (
+          !isAuthenticated ? (
             <SignInPage onNavigate={handleNavigate} />
           ) : (
             <RiderDashboard onNavigate={handleNavigate} />
@@ -153,12 +154,7 @@ export default function App() {
 
         {/* Protected Booking Route */}
         {currentRoute === 'book-ride' && (
-          authLoading ? (
-            <div className="min-h-[60vh] flex flex-col items-center justify-center gap-3">
-              <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#E21D2B] border-t-transparent" />
-              <p className="text-xs font-semibold text-[#737373]">Preparing ride booking...</p>
-            </div>
-          ) : !isAuthenticated ? (
+          !isAuthenticated ? (
             <SignInPage onNavigate={handleNavigate} />
           ) : (
             <BookingPage onNavigate={handleNavigate} />
@@ -167,12 +163,7 @@ export default function App() {
 
         {/* Protected Profile Route */}
         {currentRoute === 'profile' && (
-          authLoading ? (
-            <div className="min-h-[60vh] flex flex-col items-center justify-center gap-3">
-              <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#E21D2B] border-t-transparent" />
-              <p className="text-xs font-semibold text-[#737373]">Loading account profile...</p>
-            </div>
-          ) : !isAuthenticated ? (
+          !isAuthenticated ? (
             <SignInPage onNavigate={handleNavigate} />
           ) : (
             <ProfilePage onNavigate={handleNavigate} />
@@ -195,3 +186,5 @@ export default function App() {
     </div>
   );
 }
+
+

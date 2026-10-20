@@ -247,4 +247,22 @@ router.get('/riders/:id/profile', async (req: Request, res: Response, next: Next
   }
 });
 
+router.get('/matching-settings', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const settings = await extendedRepository.getMatchingSettings();
+    res.status(200).json({ success: true, data: settings });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put('/matching-settings', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const updated = await extendedRepository.updateMatchingSettings(req.body);
+    res.status(200).json({ success: true, message: 'Matching & priority settings updated successfully.', data: updated });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

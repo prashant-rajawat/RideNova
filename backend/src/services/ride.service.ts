@@ -4,6 +4,7 @@ import { calculateFare } from './fare.service.ts';
 import { routeService, RouteCalculationResult } from './route.service.ts';
 import { logger } from '../utils/logger.ts';
 import { extendedRepository } from '../repositories/extended.repository.ts';
+import { ValidationError } from './driver.service.ts';
 
 export const rideService = {
   /**
@@ -57,15 +58,22 @@ export const rideService = {
     const totalDistanceKm = routeResult.distanceKm;
     const estimatedDuration = routeResult.durationMinutes;
 
-    // 2. Authoritative server fare calculation
-    const fareResult = calculateFare(input.rideType, totalDistanceKm, estimatedDuration);
+    // 2. Authoritative server fare calculation + priority incentive
+    const baseFareResult = calculateFare(input.rideType, totalDistanceKm, estimatedDuration);
+    const matchingSettings = await extendedRepository.getMatchingSettings().catch(() => ({ request_timeout_minutes: 5 }));
+    const timeoutMins = matchingSettings?.request_timeout_minutes || 5;
+    const expiresAt = new Date(Date.now() + timeoutMins * 60000).toISOString();
+    const incentive = input.incentiveAmount || 0;
+    const totalEstimatedFare = baseFareResult.estimatedFare + incentive;
 
     logger.info('Calculated backend ride metrics', {
       riderId,
       rideType: input.rideType,
       totalDistanceKm,
       estimatedDuration,
-      estimatedFare: fareResult.estimatedFare,
+      estimatedFare: totalEstimatedFare,
+      priorityLevel: input.priorityLevel || 'normal',
+      incentive,
       routeSource: routeResult.routeSource,
       isGoogleRoute: routeResult.isGoogleRoute,
       stopsCount: input.stops?.length || 0,
@@ -83,10 +91,13 @@ export const rideService = {
         destination_longitude: input.destinationLongitude,
         distance_km: totalDistanceKm,
         estimated_duration_minutes: estimatedDuration,
-        estimated_fare: fareResult.estimatedFare,
+        estimated_fare: totalEstimatedFare,
         ride_type: input.rideType,
         status: 'requested',
         route_source: routeResult.routeSource,
+        priority_level: input.priorityLevel || 'normal',
+        incentive_amount: incentive,
+        expires_at: expiresAt,
       },
       (input.stops || []).map((s) => ({
         stop_order: s.stopOrder,
@@ -127,6 +138,27 @@ export const rideService = {
       );
     }
     return cancelled;
+  },
+
+  /**
+   * Update urgency driver incentive for requested ride (replacement semantics)
+   */
+  async updateIncentive(
+    rideId: string,
+    userId: string,
+    incentiveAmount: number,
+    priorityLevel?: string
+  ): Promise<RideWithStops | null> {
+    const ride = await rideRepository.findById(rideId);
+    if (!ride) return null;
+    if (ride.rider_id !== userId && userId !== 'admin') {
+      throw new ValidationError('You can only update incentive for your own ride.');
+    }
+    if (ride.status !== 'requested') {
+      throw new ValidationError('Driver incentive can only be updated while searching for a driver.');
+    }
+    const updated = await rideRepository.updateIncentive(rideId, incentiveAmount, priorityLevel);
+    return updated;
   },
 
   /**

@@ -200,11 +200,17 @@ export const routeService = {
           }
         } else {
           const errText = await res.text().catch(() => '');
-          logger.warn('Google Routes API request rejected, engaging honest fallback', {
-            statusCode: res.status,
-            statusText: res.statusText,
-            responseSnippet: errText.slice(0, 150),
-          });
+          if (res.status === 429) {
+            logger.debug('Google Routes API quota exceeded (429), engaging honest fallback', {
+              statusCode: res.status,
+            });
+          } else {
+            logger.warn('Google Routes API request rejected, engaging honest fallback', {
+              statusCode: res.status,
+              statusText: res.statusText,
+              responseSnippet: errText.slice(0, 150),
+            });
+          }
         }
       } catch (err: any) {
         logger.warn('Google Routes API network error, engaging honest fallback', {

@@ -48,6 +48,7 @@ import {
   PromoCode,
 } from '../../types/index.ts';
 import { api } from '../../lib/api.ts';
+import { PromoManagement } from '../admin/PromoManagement.tsx';
 
 interface AdminDashboardProps {
   onNavigate: (route: string) => void;
@@ -558,98 +559,57 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
       logout={logout}
     >
       {/* Top Banner */}
-      <div className="pb-6 border-b border-[#E5E5E5] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="pb-4 border-b border-brand-border flex items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-[#15803D]">
-              Administrative Console
-            </span>
-            <span className="text-xs text-[#737373]">·</span>
-            <span className="text-xs text-[#15803D] font-bold flex items-center gap-1">
-              <ShieldCheck className="h-3.5 w-3.5" />
-              Full Server Authorization
-            </span>
-          </div>
-          <h1 className="mt-1 text-2xl font-extrabold text-[#171717]">RideNova Operations Center</h1>
-          <p className="mt-1 text-xs text-[#737373]">
-            Manage driver approvals, supervise live bookings, audit Stripe transactions, and resolve support tickets.
-          </p>
+          <h1 className="text-xl font-extrabold text-brand-text">Operations Center</h1>
+          <p className="text-xs text-brand-muted">RideNova Admin</p>
         </div>
 
         <button
           onClick={fetchAdminData}
           disabled={loading}
-          className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] hover:bg-[#FAFAFA] text-xs font-semibold text-[#171717] transition-all self-start sm:self-auto"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand-border bg-white hover:bg-brand-card-hover text-xs font-semibold text-brand-text transition-all"
         >
-          <RefreshCw className={`h-3.5 w-3.5 text-[#E21D2B] ${loading ? 'animate-spin' : ''}`} />
-          <span>Sync Database</span>
+          <RefreshCw className={`h-3.5 w-3.5 text-brand-primary ${loading ? 'animate-spin' : ''}`} />
+          <span>Sync</span>
         </button>
       </div>
 
-      {/* Alerts */}
-      {statusMessage && (
-        <div
-          className={`mt-4 p-3 rounded-lg text-xs flex items-center justify-between ${
-            statusMessage.type === 'success'
-              ? 'bg-[#15803D]/10 border border-[#15803D]/30 text-[#15803D]'
-              : 'bg-[#B91C1C]/10 border border-[#B91C1C]/30 text-[#B91C1C]'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            {statusMessage.type === 'success' ? (
-              <CheckCircle2 className="h-4 w-4 shrink-0" />
-            ) : (
-              <AlertCircle className="h-4 w-4 shrink-0" />
-            )}
-            <span>{statusMessage.text}</span>
-          </div>
-          <button onClick={() => setStatusMessage(null)} className="hover:opacity-75 font-bold">
-            ✕
-          </button>
-        </div>
-      )}
-
       {/* TAB 1: OVERVIEW */}
       {activeTab === 'overview' && (
-        <div className="mt-6 space-y-6">
+        <div className="mt-4 space-y-4">
           {/* Key Metric Tiles */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            <div className="rounded-xl border border-[#E5E5E5] bg-[#FFFFFF] p-4 shadow-sm">
-              <span className="text-[10px] font-bold uppercase text-[#737373]">Total Platform Users</span>
-              <p className="mt-1 text-2xl font-black text-[#171717]">{overview?.totalUsers ?? (riders.length + drivers.length)}</p>
-              <span className="text-[10px] text-[#737373] mt-0.5 block">{overview?.totalRiders || riders.length} riders · {overview?.totalDrivers || drivers.length} drivers</span>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
+            <div className="rounded-lg border border-brand-border bg-white p-3 shadow-sm">
+              <span className="text-[9px] font-bold uppercase text-brand-muted">Total Users</span>
+              <p className="text-lg font-black text-brand-text">{overview?.totalUsers ?? (riders.length + drivers.length)}</p>
             </div>
 
-            <div className="rounded-xl border border-[#E5E5E5] bg-[#FFFFFF] p-4 shadow-sm">
-              <span className="text-[10px] font-bold uppercase text-[#737373]">Active Drivers</span>
-              <p className="mt-1 text-2xl font-black text-[#15803D]">{overview?.activeDrivers ?? drivers.filter(d => d.is_online).length}</p>
-              <span className="text-[10px] text-[#15803D] mt-0.5 block">Online now</span>
+            <div className="rounded-lg border border-brand-border bg-white p-3 shadow-sm">
+              <span className="text-[9px] font-bold uppercase text-brand-muted">Active Drivers</span>
+              <p className="text-lg font-black text-brand-success">{overview?.activeDrivers ?? drivers.filter(d => d.is_online).length}</p>
             </div>
 
-            <div className="rounded-xl border border-[#E5E5E5] bg-[#FFFFFF] p-4 shadow-sm">
-              <span className="text-[10px] font-bold uppercase text-[#737373]">Total Rides</span>
-              <p className="mt-1 text-2xl font-black text-[#171717]">{overview?.totalRides ?? rides.length}</p>
-              <span className="text-[10px] text-[#737373] mt-0.5 block">{overview?.completedRides ?? rides.filter(r => r.status === 'ride_completed').length} completed</span>
+            <div className="rounded-lg border border-brand-border bg-white p-3 shadow-sm">
+              <span className="text-[9px] font-bold uppercase text-brand-muted">Total Rides</span>
+              <p className="text-lg font-black text-brand-text">{overview?.totalRides ?? rides.length}</p>
             </div>
 
-            <div className="rounded-xl border border-[#E5E5E5] bg-[#FFFFFF] p-4 shadow-sm">
-              <span className="text-[10px] font-bold uppercase text-[#737373]">Gross Volume</span>
-              <p className="mt-1 text-2xl font-black text-[#171717]">₹{Number(overview?.totalRevenue || 0).toFixed(0)}</p>
-              <span className="text-[10px] text-[#737373] mt-0.5 block">Total ride fares</span>
+            <div className="rounded-lg border border-brand-border bg-white p-3 shadow-sm">
+              <span className="text-[9px] font-bold uppercase text-brand-muted">Gross Volume</span>
+              <p className="text-lg font-black text-brand-text">₹{Number(overview?.totalRevenue || 0).toFixed(0)}</p>
             </div>
 
-            <div className="rounded-xl border border-[#E5E5E5] bg-[#FFFFFF] p-4 shadow-sm">
-              <span className="text-[10px] font-bold uppercase text-[#737373]">Platform Fees (15%)</span>
-              <p className="mt-1 text-2xl font-black text-[#E21D2B]">₹{Number(overview?.platformFeeTotal || 0).toFixed(0)}</p>
-              <span className="text-[10px] text-[#E21D2B] mt-0.5 block">Net revenue</span>
+            <div className="rounded-lg border border-brand-border bg-white p-3 shadow-sm">
+              <span className="text-[9px] font-bold uppercase text-brand-muted">Fees (15%)</span>
+              <p className="text-lg font-black text-brand-primary">₹{Number(overview?.platformFeeTotal || 0).toFixed(0)}</p>
             </div>
 
-            <div className="rounded-xl border border-[#E5E5E5] bg-[#FFFFFF] p-4 shadow-sm">
-              <span className="text-[10px] font-bold uppercase text-[#737373]">Support Tickets</span>
-              <p className="mt-1 text-2xl font-black text-[#B45309]">
+            <div className="rounded-lg border border-brand-border bg-white p-3 shadow-sm">
+              <span className="text-[9px] font-bold uppercase text-brand-muted">Tickets</span>
+              <p className="text-lg font-black text-brand-warning">
                 {tickets.filter((t) => t.status !== 'resolved' && t.status !== 'closed').length}
               </p>
-              <span className="text-[10px] text-[#B45309] mt-0.5 block">Open or in-progress</span>
             </div>
           </div>
 
@@ -2176,47 +2136,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
 
       {/* TAB 6: PROMO CODES */}
       {activeTab === 'promos' && (
-        <div className="mt-6 space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-[#E5E5E5]">
-            <div>
-              <h2 className="text-base font-bold text-[#171717]">Promotional Discounts & Vouchers</h2>
-              <p className="text-xs text-[#737373]">Manage marketing promo codes usable by riders during checkout.</p>
-            </div>
-            <button
-              onClick={() => setIsPromoModalOpen(true)}
-              className="px-3.5 py-2 rounded-lg bg-[#E21D2B] hover:bg-[#BE1622] text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
-            >
-              <Plus className="h-4 w-4" />
-              <span>Create New Promo</span>
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {promos.map((p) => (
-              <div key={p.id} className="rounded-xl border border-[#E5E5E5] bg-[#FFFFFF] p-5 shadow-sm space-y-2">
-                <div className="flex items-center justify-between pb-2 border-b border-[#E5E5E5]">
-                  <span className="font-mono text-base font-black text-[#E21D2B]">{p.code}</span>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-[#15803D]/10 text-[#15803D]">
-                    {p.is_active ? 'Active' : 'Inactive'}
-                  </span>
-                </div>
-
-                <div className="space-y-1 text-xs">
-                  <p className="font-bold text-[#171717]">
-                    Discount:{' '}
-                    {p.discount_type === 'percentage'
-                      ? `${p.discount_value}% off (Cap: ₹${p.maximum_discount || 'None'})`
-                      : `Flat ₹${p.discount_value} off`}
-                  </p>
-                  <p className="text-[#737373]">Min. Ride Fare: ₹{p.minimum_fare}</p>
-                  <p className="text-[#737373]">
-                    Redemptions: {p.used_count} / {p.usage_limit || 'Unlimited'}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <PromoManagement promos={promos} onRefresh={fetchAdminData} />
       )}
 
       {/* TAB 7: RIDERS REGISTRY */}
@@ -2343,91 +2263,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
         </div>
       )}
 
-      {/* CREATE PROMO MODAL */}
-      {isPromoModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-fade-in">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-[#E5E5E5] space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-[#E5E5E5]">
-              <h3 className="text-base font-bold text-[#171717]">Create Promo Voucher</h3>
-              <button onClick={() => setIsPromoModalOpen(false)} className="text-[#737373] hover:text-[#171717]">
-                ✕
-              </button>
-            </div>
 
-            <form onSubmit={handleCreatePromo} className="space-y-3.5 text-xs">
-              <div>
-                <label className="font-semibold text-[#171717] block mb-1">Promo Code (e.g. FLASH50)</label>
-                <input
-                  type="text"
-                  value={promoForm.code}
-                  onChange={(e) => setPromoForm({ ...promoForm, code: e.target.value.toUpperCase() })}
-                  required
-                  placeholder="CODE"
-                  className="w-full rounded-lg border border-[#E5E5E5] px-3 py-2 font-mono uppercase focus:border-[#E21D2B] focus:outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-semibold text-[#171717] block mb-1">Discount Type</label>
-                  <select
-                    value={promoForm.discount_type}
-                    onChange={(e) => setPromoForm({ ...promoForm, discount_type: e.target.value as any })}
-                    className="w-full rounded-lg border border-[#E5E5E5] px-3 py-2 text-xs focus:border-[#E21D2B] focus:outline-none"
-                  >
-                    <option value="percentage">Percentage (%)</option>
-                    <option value="fixed">Fixed (₹)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="font-semibold text-[#171717] block mb-1">Discount Value</label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={promoForm.discount_value}
-                    onChange={(e) => setPromoForm({ ...promoForm, discount_value: parseFloat(e.target.value) || 0 })}
-                    required
-                    className="w-full rounded-lg border border-[#E5E5E5] px-3 py-2 text-xs font-mono focus:border-[#E21D2B] focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-semibold text-[#171717] block mb-1">Min Ride Fare (₹)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={promoForm.minimum_fare}
-                    onChange={(e) => setPromoForm({ ...promoForm, minimum_fare: parseFloat(e.target.value) || 0 })}
-                    className="w-full rounded-lg border border-[#E5E5E5] px-3 py-2 text-xs font-mono focus:border-[#E21D2B] focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-semibold text-[#171717] block mb-1">Max Cap (₹)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={promoForm.maximum_discount}
-                    onChange={(e) => setPromoForm({ ...promoForm, maximum_discount: parseFloat(e.target.value) || 0 })}
-                    className="w-full rounded-lg border border-[#E5E5E5] px-3 py-2 text-xs font-mono focus:border-[#E21D2B] focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={actionLoading}
-                className="w-full py-2.5 rounded-lg bg-[#E21D2B] hover:bg-[#BE1622] text-white font-bold text-xs shadow-md transition-all mt-2"
-              >
-                Publish Promo Code
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* CUSTOMER PROFILE MODAL */}
       {isRiderModalOpen && (

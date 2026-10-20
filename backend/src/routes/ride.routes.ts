@@ -24,6 +24,9 @@ router.get('/:id', requireAuth, requireRole('rider', 'admin'), rideController.ge
 // POST /api/rides/:id/cancel - Cancel ride
 router.post('/:id/cancel', requireAuth, requireRole('rider', 'driver', 'admin'), rideController.cancelRide);
 
+// POST /api/rides/:id/incentive - Urgency booster incentive offer
+router.post('/:id/incentive', requireAuth, requireRole('rider', 'admin'), rideController.updateIncentive);
+
 // POST /api/rides/:id/pay - Process payment (Stripe test-mode / Card)
 router.post('/:id/pay', requireAuth, requireRole('rider', 'admin'), rideController.processPayment);
 

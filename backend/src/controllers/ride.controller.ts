@@ -220,6 +220,47 @@ export const rideController = {
   },
 
   /**
+   * POST /api/rides/:id/incentive
+   * Urgency booster: offer drivers additional incentive (replacement semantics)
+   */
+  async updateIncentive(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Auth required' } });
+        return;
+      }
+
+      const { id } = req.params;
+      const { incentiveAmount, priorityLevel } = req.body || {};
+
+      if (typeof incentiveAmount !== 'number' || incentiveAmount < 0) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_INCENTIVE', message: 'Incentive amount must be a non-negative number.' },
+        });
+        return;
+      }
+
+      const updated = await rideService.updateIncentive(id, req.user.id, incentiveAmount, priorityLevel);
+      if (!updated) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'INCENTIVE_FAILED', message: 'Cannot update incentive. Ride not found or already assigned.' },
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        message: `Driver incentive updated to +₹${incentiveAmount}. Drivers notified!`,
+        data: updated,
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  /**
    * POST /api/rides/:id/pay
    * Process payment (Stripe test-mode / Card)
    */

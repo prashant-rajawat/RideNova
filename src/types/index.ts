@@ -163,7 +163,12 @@ export interface RideWithStops {
   driver?: DriverDisplayInfo | null;
   rider?: RiderDisplayInfo | null;
   payment?: PaymentDisplayInfo | null;
-  scheduled_at?: string | null;
+  expires_at?: string | null;
+  priority_level?: string | null;
+  incentive_amount?: number | null;
+  otp_code?: string | null;
+  otp_verified?: boolean;
+  cancellation_fee?: number | null;
   accepted_at?: string | null;
   started_at?: string | null;
   completed_at?: string | null;
@@ -399,6 +404,8 @@ export interface PromoCode {
   usage_limit?: number | null;
   used_count: number;
   is_active: boolean;
+  starts_at?: string | null;
+  expires_at?: string | null;
   created_at: string;
 }
 

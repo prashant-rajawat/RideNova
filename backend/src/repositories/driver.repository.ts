@@ -659,6 +659,90 @@ export const driverRepository = {
     return payout;
   },
 
+  async updateExtendedProfile(
+    driverId: string,
+    updates: {
+      profile_photo_url?: string | null;
+      upi_id?: string | null;
+      operating_city?: string | null;
+      preferred_language?: string | null;
+      dob?: string | null;
+      address?: string | null;
+      auto_accept_rides?: boolean;
+      working_hours_preference?: string | null;
+      quiet_ride_preference?: boolean;
+    }
+  ): Promise<DriverWithVehicle | null> {
+    if (isDatabaseConfigured()) {
+      const setClauses: string[] = [];
+      const values: any[] = [];
+      let idx = 1;
+
+      if (updates.profile_photo_url !== undefined) {
+        setClauses.push(`profile_photo_url = $${idx++}`);
+        values.push(updates.profile_photo_url);
+      }
+      if (updates.upi_id !== undefined) {
+        setClauses.push(`upi_id = $${idx++}`);
+        values.push(updates.upi_id);
+      }
+      if (updates.operating_city !== undefined) {
+        setClauses.push(`operating_city = $${idx++}`);
+        values.push(updates.operating_city);
+      }
+      if (updates.preferred_language !== undefined) {
+        setClauses.push(`preferred_language = $${idx++}`);
+        values.push(updates.preferred_language);
+      }
+      if (updates.dob !== undefined) {
+        setClauses.push(`dob = $${idx++}`);
+        values.push(updates.dob);
+      }
+      if (updates.address !== undefined) {
+        setClauses.push(`address = $${idx++}`);
+        values.push(updates.address);
+      }
+      if (updates.auto_accept_rides !== undefined) {
+        setClauses.push(`auto_accept_rides = $${idx++}`);
+        values.push(updates.auto_accept_rides);
+      }
+      if (updates.working_hours_preference !== undefined) {
+        setClauses.push(`working_hours_preference = $${idx++}`);
+        values.push(updates.working_hours_preference);
+      }
+      if (updates.quiet_ride_preference !== undefined) {
+        setClauses.push(`quiet_ride_preference = $${idx++}`);
+        values.push(updates.quiet_ride_preference);
+      }
+
+      if (setClauses.length > 0) {
+        values.push(driverId);
+        await query(
+          `UPDATE drivers SET ${setClauses.join(', ')}, updated_at = NOW() WHERE id = $${idx}`,
+          values
+        );
+        return this.findById(driverId);
+      }
+    }
+
+    const driver = memoryDrivers.get(driverId);
+    if (driver) {
+      if (updates.profile_photo_url !== undefined) driver.profile_photo_url = updates.profile_photo_url;
+      if (updates.upi_id !== undefined) driver.upi_id = updates.upi_id;
+      if (updates.operating_city !== undefined) driver.operating_city = updates.operating_city;
+      if (updates.preferred_language !== undefined) driver.preferred_language = updates.preferred_language;
+      if (updates.dob !== undefined) driver.dob = updates.dob;
+      if (updates.address !== undefined) driver.address = updates.address;
+      if (updates.auto_accept_rides !== undefined) driver.auto_accept_rides = updates.auto_accept_rides;
+      if (updates.working_hours_preference !== undefined) driver.working_hours_preference = updates.working_hours_preference;
+      if (updates.quiet_ride_preference !== undefined) driver.quiet_ride_preference = updates.quiet_ride_preference;
+      driver.updated_at = new Date().toISOString();
+      memoryDrivers.set(driverId, driver);
+      return this.findById(driverId);
+    }
+    return null;
+  },
+
   /**
    * Reset driver memory stores
    */

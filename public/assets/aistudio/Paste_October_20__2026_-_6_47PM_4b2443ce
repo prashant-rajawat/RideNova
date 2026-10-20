@@ -1,0 +1,1014 @@
+# RIDENOVA MASTER PROMPT — COMPLETE RIDE REQUEST, LIVE DRIVER MATCHING, URGENCY FARE OFFERS, OTP VERIFICATION, AND PAYMENT FLOW
+
+## 1. YOUR ROLE AND PRIMARY OBJECTIVE
+
+Act as a senior full-stack engineer, product designer, backend architect, database engineer, security specialist, and mobile-first UI/UX expert.
+
+You are working on my existing application, RideNova, an Uber-style ride-booking platform. I have provided screenshots showing the current customer ride-request confirmation screen, customer dashboard, and driver active-trip console. Use these screenshots as the starting point for understanding the existing application and its problems.
+
+Your task is to FIX, COMPLETE, AND IMPROVE the existing implementation. Do not simply generate a report, describe possible solutions, or modify only backend files. Implement the required changes in the actual frontend, backend, database integration, and real-time communication layers.
+
+The highest priority is a professional, responsive, mobile-first user experience. However, UI improvements must never break existing functionality, authentication, driver approval, admin controls, ride history, notifications, payments, or other working application features.
+
+Preserve the existing RideNova identity and white, red, and black theme:
+
+- Primary red: #E21D2B
+- Dark red: #BE1622
+- White: #FFFFFF
+- Primary text: #171717
+- Secondary text: #737373
+- Borders: #E5E5E5
+- Soft red backgrounds: #FFF1F2
+
+Use the application's existing architecture and libraries wherever possible. Inspect the codebase before editing it. Reuse existing routes, services, components, database tables, authentication mechanisms, and real-time subscriptions instead of creating duplicate systems.
+
+Do not delete existing data, reset the database, remove existing routes, replace working features with placeholders, or create fake ride records.
+
+## 2. CRITICAL RULE: FIX THE COMPLETE USER JOURNEY
+
+The current customer ride confirmation page displays a message similar to "Ride Requested Successfully" and "Searching for a driver." However, there is no visible countdown, the customer cannot increase the offered fare, and the screen may continue searching even after a driver accepts the ride.
+
+The driver can see an accepted ride and its details, but the customer may still see the searching screen until manually refreshing the application.
+
+The trip-start process also needs secure OTP verification, and the payment process must remain connected to the completed ride.
+
+Fix the entire journey, from the moment a customer submits a booking request until the driver completes the trip and the customer reaches the payment screen.
+
+The complete journey must be:
+
+1. Customer selects pickup, destination, and ride type.
+2. Customer reviews the fare and submits the request.
+3. The backend creates and persists the ride request.
+4. A five-minute countdown begins and is displayed on the customer screen.
+5. Eligible drivers receive the request.
+6. The customer can optionally increase the driver incentive through clearly displayed add-on offers.
+7. Drivers receive updated offers and can accept the request.
+8. The backend atomically assigns one eligible driver.
+9. The customer immediately receives the driver assignment update without refreshing.
+10. The customer sees the driver's verified profile information and vehicle details.
+11. The driver reaches the pickup location.
+12. The driver requests the customer's trip-start OTP.
+13. The driver enters the OTP into the driver application.
+14. The backend verifies the OTP securely.
+15. The trip starts only after successful verification.
+16. The driver updates the trip status as the journey progresses.
+17. The driver completes the trip.
+18. The customer sees the appropriate payment options configured by the administrator.
+19. The payment is recorded and verified according to the selected payment method.
+20. The customer and driver can see the final trip summary, fare breakdown, payment status, and receipt where applicable.
+
+Every stage must use real persisted data and verified state transitions. Do not simulate a successful assignment, OTP verification, payment, or trip completion merely to make the interface look functional.
+
+## 3. FIVE-MINUTE RIDE REQUEST COUNTDOWN
+
+### 3.1 Countdown requirements
+
+Implement a five-minute request-acceptance window for each new eligible ride request.
+
+When a customer successfully submits a ride request, immediately display a professional status panel containing:
+
+- Ride request submitted.
+- Searching for an available driver.
+- A visible countdown starting at 05:00.
+- Pickup location and destination.
+- Ride category.
+- Estimated fare.
+- Current driver incentive, if applicable.
+- Available urgency-offer buttons.
+- A clear cancel-request option.
+- An explanation that the request will automatically expire if no driver accepts before the deadline.
+
+The timer must visibly count down once per second:
+
+05:00, 04:59, 04:58, 04:57, and so on.
+
+Use a compact digital timer or clear MM:SS presentation. Do not use a large decorative heading that occupies most of a mobile screen.
+
+### 3.2 Server-authoritative expiry
+
+The timer must not depend solely on a browser-side JavaScript interval.
+
+Store the request creation time and its server-calculated acceptance deadline in the database. Calculate remaining time using the persisted deadline and the current server time.
+
+The frontend may use a local interval to render the countdown, but the backend must enforce the deadline.
+
+When the customer refreshes the page, closes and reopens the application, or signs in again, the timer must resume from the actual remaining time. It must not restart at five minutes.
+
+When the deadline expires:
+
+- Atomically transition an unaccepted request to EXPIRED or the equivalent supported terminal state.
+- Stop sending it as an eligible new request.
+- Remove it from eligible drivers' active request lists.
+- Notify the customer immediately.
+- Display a professional "No driver accepted within the available time" message.
+- Offer a button to submit a new request.
+- Preserve the expired request in ride history.
+- Do not charge the customer for a ride that was never accepted.
+- Do not delete the ride record.
+
+If a driver accepts at approximately the same moment as expiry, the backend must resolve the race condition transactionally. Only one valid terminal outcome may be recorded. A request must never be both EXPIRED and ACCEPTED.
+
+If an accepted ride is subsequently cancelled, do not restart the original request countdown automatically. Apply the defined cancellation and rebooking rules.
+
+### 3.3 Customer cancellation
+
+The cancel button must actually work.
+
+When clicked, show a compact confirmation dialog explaining that the request will be cancelled. If the customer confirms, send an authenticated cancellation request to the backend.
+
+The backend must verify that the customer owns the ride and that the ride is still cancellable.
+
+On success, update the database, notify relevant drivers, remove the request from their available request lists, and update the customer interface immediately.
+
+Prevent double cancellation, duplicate requests, and cancellation of completed trips.
+
+Display success or failure feedback. Never leave the customer wondering whether the button worked.
+
+## 4. OPTIONAL URGENCY AND ADD-ON FARE OFFERS
+
+### 4.1 Purpose
+
+Customers sometimes need a ride urgently. Allow them to voluntarily increase the amount offered to eligible drivers to make their request more attractive.
+
+The initial requested fare and any additional driver incentive must be separate values. Do not silently change the original estimated fare, platform commission, or customer's final payable amount.
+
+Add three clearly labelled options:
+
+- +₹100 — Standard Boost
+- +₹500 — Priority Boost
+- +₹1,000 — High-Priority Boost
+
+These are example initial amounts. If the existing administrator configuration already defines supported incentive amounts, use that configuration instead of hardcoding conflicting values.
+
+Use professional wording such as "Offer drivers an extra incentive to improve your chances of finding a driver sooner."
+
+Do not use emergency, explosion, bomb, panic, or threatening visual language. High-priority offers should use an attractive but restrained red accent, not alarming animations.
+
+### 4.2 Customer interface
+
+Display the options on the active request screen in a compact, mobile-friendly card.
+
+Each option must clearly communicate:
+
+- The additional amount.
+- Its incentive category.
+- The total driver incentive after selection.
+- Whether the offer is active.
+- The amount the customer may be charged, if any.
+- The applicable cancellation and refund rules.
+
+The customer must explicitly confirm an offer before it becomes active.
+
+Do not charge the customer simply because they click an incentive button. Implement a transparent authorization or payment process if the business decides that the incentive must be prepaid.
+
+If no payment authorization exists, do not pretend that money has been collected. Show the incentive as an offer awaiting confirmation or payment, according to the actual implementation.
+
+Do not allow the customer to repeatedly click the same offer to create duplicate charges or duplicate incentives.
+
+### 4.3 Increasing an existing offer
+
+If the customer initially selects +₹100 and later selects +₹500, clearly explain whether the new selection replaces the previous incentive or increases it.
+
+For this initial implementation, use REPLACEMENT semantics: selecting +₹500 replaces the previous +₹100 offer. The total incentive becomes ₹500, not ₹600.
+
+Selecting +₹1,000 replaces the previous incentive with ₹1,000.
+
+If the product later supports incremental additions, implement that as a separately configured feature. Do not mix the two calculation models.
+
+Record the offer amount, customer confirmation, creation time, and offer version in the database.
+
+### 4.4 Driver notifications
+
+Whenever a customer increases the active offer, notify all eligible drivers who may receive that request.
+
+Eligible drivers must be approved, available, online, and not assigned to another active trip. Apply existing driver eligibility, service-area, vehicle, and location rules.
+
+The driver notification must display:
+
+- "Priority Ride Offer Updated" or equivalent.
+- Pickup and destination information as permitted.
+- Ride distance and estimated duration.
+- Base estimated fare.
+- Additional driver incentive.
+- Total estimated driver earnings before any separately disclosed deductions.
+- Remaining acceptance time.
+- An Accept button.
+
+For example:
+
+"Priority Ride Offer Updated"
+"An additional ₹500 incentive is being offered."
+"Estimated fare: ₹1,000"
+"Driver incentive: ₹500"
+"Accept Ride"
+
+These figures are illustrative. Calculate actual displayed values from the ride's persisted fare and confirmed incentive. Do not show misleading earnings.
+
+When the customer increases the offer, eligible drivers who previously ignored the request should see the updated offer. Avoid creating duplicate ride cards for the same ride.
+
+### 4.5 Incentive financial rules
+
+Keep these amounts separate in the financial model:
+
+- Original estimated fare.
+- Final trip fare.
+- Customer-paid driver incentive.
+- Platform commission.
+- Driver earnings.
+- Applicable payment processing fees.
+- Refunds or adjustments.
+
+Do not assume that the entire incentive automatically becomes driver earnings without documenting the business rule.
+
+Do not deduct the incentive from an existing driver wallet or bank account without explicit authorization and a real, audited transaction.
+
+If the customer is charged an incentive, implement its authorization, capture, cancellation, and refund rules correctly. If payment functionality is not configured, expose the appropriate disabled or pending state rather than fabricating a completed financial transaction.
+
+The administrator must eventually be able to configure incentive amounts, labels, eligibility, and maximum limits. Reuse existing admin settings where possible.
+
+## 5. DRIVER ELIGIBILITY AND ATOMIC RIDE ACCEPTANCE
+
+### 5.1 Who receives requests?
+
+Only drivers who satisfy all existing eligibility rules may receive new ride requests.
+
+At minimum, verify:
+
+- Driver is authenticated.
+- Driver account is approved.
+- Required KYC is approved.
+- Driver is online.
+- Driver is available.
+- Driver has no active trip.
+- Driver has a valid eligible vehicle.
+- Driver is within the configured service area or matching radius, where applicable.
+- Driver is permitted to accept the requested ride category.
+
+A driver who is already on a trip must not receive or accept another normal ride request.
+
+A newly online eligible driver may receive an existing request if it is still within its acceptance deadline and has not been accepted, cancelled, or expired.
+
+Do not promise that every request will definitely be accepted. Explain that matching and incentives improve the chance of finding a driver but cannot guarantee availability.
+
+### 5.2 Accept operation
+
+Implement a secure backend operation for accepting a ride.
+
+The backend must validate the ride status, acceptance deadline, driver eligibility, and current driver availability.
+
+Use a database transaction or an equivalent atomic concurrency-safe operation so that two drivers cannot accept the same ride.
+
+Exactly one driver can become the assigned driver.
+
+The winning acceptance must persist:
+
+- Ride ID.
+- Driver ID.
+- Acceptance timestamp.
+- Current ride status.
+- Confirmed incentive amount, if any.
+- Relevant audit information.
+
+After the transaction commits, notify the customer and eligible driver interfaces.
+
+If a second driver attempts to accept the same ride, return a clear "This ride has already been accepted" response and refresh the driver's request list.
+
+Do not assign the ride using frontend state alone.
+
+### 5.3 Driver request list
+
+The driver dashboard must display real eligible requests and current offers.
+
+Each request card should include the essential information without overwhelming the mobile screen:
+
+- Estimated fare.
+- Pickup and destination.
+- Approximate distance and duration.
+- Additional incentive, if active.
+- Remaining acceptance time.
+- Accept button.
+
+Use compact cards, sensible typography, and accessible touch targets.
+
+Once the ride is accepted by another driver, remove or disable the request immediately.
+
+## 6. IMMEDIATE CUSTOMER DRIVER-ASSIGNMENT NOTIFICATION
+
+This is one of the highest-priority bugs.
+
+Currently, the driver may accept a ride while the customer continues seeing "Searching for a driver" until the customer manually refreshes.
+
+Fix this end to end.
+
+### 6.1 Real-time event
+
+After a successful database assignment, publish a real-time event such as DRIVER_ASSIGNED.
+
+Use the existing real-time infrastructure and subscription hooks. Do not create a second, conflicting real-time system.
+
+The event should contain only the minimum information needed to identify the ride and retrieve the authorized updated ride details.
+
+The customer must receive the update without manually refreshing the page.
+
+If real-time communication disconnects, implement reconnection and a reasonable polling fallback. Polling must not create duplicate rides or notifications.
+
+### 6.2 Driver-assigned dialog
+
+Immediately show a professional modal or notification:
+
+"Your Driver Is Confirmed"
+
+Display:
+
+- Driver's profile photo.
+- Driver's verified display name.
+- Driver rating, only if actual rating data exists.
+- Vehicle make and model.
+- Vehicle registration number.
+- Vehicle colour, if available.
+- Estimated arrival time, if available.
+- Pickup location.
+- Driver contact action, if permitted.
+- Current ride status.
+
+Include a clear close button.
+
+Closing the dialog must dismiss the overlay, not cancel the ride or stop real-time updates.
+
+After the dialog is dismissed, the active ride card must remain visible on the customer's dashboard.
+
+Do not use placeholder phone numbers, fabricated profile photos, fake ratings, or invented vehicle registrations.
+
+If a field is unavailable, display a suitable message such as "Not provided" or omit the field.
+
+### 6.3 Update the customer dashboard
+
+As soon as the assignment succeeds:
+
+- Replace the searching state with the assigned-driver state.
+- Stop the request countdown.
+- Remove the offer controls that are no longer available.
+- Show the assigned driver.
+- Show the current trip status.
+- Show the route and map where available.
+- Show the estimated arrival time when supported.
+- Preserve the same ride record and ride ID.
+
+Do not require the customer to reload the page.
+
+### 6.4 Prevent duplicate notifications
+
+The same assignment event may arrive through a real-time channel and a fallback API refresh.
+
+Use the ride ID, event type, and assignment state to prevent duplicate popups and duplicate notifications.
+
+A refresh must not repeatedly display the same assignment popup once the customer has dismissed it, unless a genuinely new important event occurs.
+
+Persist important notifications where appropriate.
+
+## 7. LIVE RIDE STATUS AND MAP TRACKING
+
+Create a clear, consistent ride lifecycle shared by the customer, driver, and backend.
+
+Use the existing status names where possible and map them consistently to the following conceptual states:
+
+- REQUESTED
+- ACCEPTED
+- EN_ROUTE_TO_PICKUP
+- ARRIVED_AT_PICKUP
+- IN_PROGRESS
+- COMPLETED
+- CANCELLED
+- EXPIRED
+
+Do not introduce conflicting status values if the current database uses different enums. Map the existing states correctly and make any required migration additive and safe.
+
+The driver must be able to update the trip through valid transitions:
+
+1. Accepted.
+2. Heading to pickup.
+3. Arrived at pickup.
+4. OTP verified.
+5. Trip started.
+6. Trip completed.
+
+The backend must reject invalid transitions, duplicate starts, and completion of a trip that has not started.
+
+### Map requirements
+
+Display pickup and destination markers, route information, and the driver's current location when the relevant permissions and map services are available.
+
+Show the driver's live position only with appropriate consent and authorization.
+
+The customer should see a route line and the driver's marker when valid location data exists.
+
+The driver should have a practical navigation action to open Google Maps or another configured navigation provider.
+
+Do not fabricate GPS coordinates or draw a supposedly live route from invented positions.
+
+If location permission is denied or GPS data is unavailable, show a useful fallback message and the pickup/destination details.
+
+Throttle location updates appropriately and ensure that only authorized users can access the relevant trip's location information.
+
+## 8. SECURE OTP VERIFICATION BEFORE STARTING A TRIP
+
+Implement a proper trip-start OTP process similar to established ride-hailing applications.
+
+### 8.1 OTP generation
+
+After a driver has accepted a ride, generate a random, unpredictable four-digit OTP using a secure backend random-number generator.
+
+The OTP must be associated with the correct ride and customer.
+
+Do not use a fixed OTP such as 1234, a predictable sequence, a hardcoded test code, or a value generated exclusively in the frontend.
+
+Persist a secure representation of the OTP where practical, such as a cryptographic hash, together with its expiry and verification state.
+
+Do not expose the OTP in driver-facing API responses, public ride data, logs, analytics, or browser console messages.
+
+The customer must be able to see their OTP securely in the authenticated customer application after assignment and before trip start.
+
+If SMS or email delivery is implemented, send the OTP only to the verified contact associated with the ride. Do not claim that an SMS was sent unless an actual configured delivery provider confirms it.
+
+For development, an authenticated customer screen can display the OTP. Do not implement insecure production shortcuts.
+
+### 8.2 Customer OTP screen
+
+On the customer side, show a compact panel:
+
+"Your Trip Verification Code"
+
+Display the four-digit code clearly, with a short explanation:
+
+"Share this code with your driver when you are ready to start your trip. Your trip cannot start until the code is verified."
+
+Do not display the OTP on a public page or in a notification visible to unrelated users.
+
+The code must be available only to the authenticated customer who owns the ride.
+
+### 8.3 Driver OTP entry
+
+On the driver screen, show an OTP entry component when the driver has arrived at the pickup location.
+
+The component must include:
+
+- Four-digit numeric input.
+- Clear labels.
+- Submit or Verify OTP button.
+- Loading state.
+- Invalid-code feedback.
+- Retry feedback.
+- Accessible keyboard and mobile input behavior.
+
+The driver enters the code provided by the customer and submits it to the backend.
+
+The backend must verify the OTP against the correct ride, assigned driver, customer, expiry, and current ride status.
+
+### 8.4 OTP security
+
+Implement all of the following:
+
+- Short OTP validity period, configurable in backend settings.
+- Maximum verification attempts.
+- Rate limiting.
+- Secure comparison.
+- OTP expiry.
+- Single successful verification.
+- Audit events without storing the plaintext OTP in logs.
+- Rejection of attempts from drivers who are not assigned to the ride.
+- Rejection of OTP verification for expired, cancelled, or completed rides.
+- Protection against brute-force attempts.
+- Clear customer and driver error messages.
+
+After too many incorrect attempts, temporarily block further verification attempts and provide a secure recovery process.
+
+Do not allow a driver to bypass OTP verification by calling another API endpoint or changing frontend state.
+
+### 8.5 Start trip only after verification
+
+The backend must reject every trip-start request unless OTP verification succeeded for that ride.
+
+On successful verification, atomically mark the OTP as verified and transition the ride to IN_PROGRESS.
+
+Notify both the customer and driver immediately.
+
+The customer should see "Your trip has started" and the live trip interface.
+
+The driver should see the active navigation and trip controls.
+
+If the OTP is incorrect, the trip must remain unstarted.
+
+If the customer has not shared the code or cannot complete verification, provide a defined support or recovery path. Do not silently bypass verification.
+
+## 9. TRIP COMPLETION AND PAYMENT HANDOFF
+
+The existing RideNova payment flow is being developed separately. Integrate with it rather than inventing a competing payment system.
+
+When the driver reaches the destination and completes the ride:
+
+1. Validate that the trip is IN_PROGRESS.
+2. Calculate or retrieve the authoritative final fare on the backend.
+3. Persist the completion timestamp and final ride details.
+4. Transition the ride to COMPLETED.
+5. Publish the updated ride status to the customer and driver.
+6. Display the trip summary.
+7. Show the payment interface if payment is still due.
+
+The final fare must not be trusted from a frontend-submitted amount.
+
+The trip completion action must not automatically mark an online payment as successful.
+
+Keep ride status and payment status separate.
+
+A completed ride may have a payment status such as PENDING, PROCESSING, PAID, FAILED, or REFUNDED, depending on the actual payment implementation.
+
+### Payment method selection
+
+Show only payment methods enabled and configured by the administrator.
+
+Depending on the actual configuration, this could include:
+
+- Cash.
+- UPI.
+- Supported online card payments.
+- Other genuinely implemented methods.
+
+For UPI, show only the configured UPI ID, QR code, or supported payment integration.
+
+If the administrator has configured a QR code, display the correct configured QR code.
+
+If the administrator has configured only a UPI ID, display that UPI ID clearly.
+
+Do not invent QR codes or display payment apps that are not enabled.
+
+For cash, require a clear confirmation that the cash was collected. Store the payment method and payment status, and apply the existing documented commission and driver-earnings rules.
+
+For online payments, use the existing verified payment-provider integration and confirm success through the trusted backend/webhook flow.
+
+Never mark an online payment PAID merely because the customer returned from a checkout page.
+
+If online payment is not yet configured, show an honest disabled or unavailable state.
+
+### Fare and earnings breakdown
+
+Show a professional summary containing the actual values for:
+
+- Final trip fare.
+- Confirmed incentive, if applicable.
+- Platform commission.
+- Driver earnings.
+- Amount already paid, if any.
+- Remaining amount due.
+- Payment method.
+- Payment status.
+
+Make the commission formula explicit and consistent with the administrator's configured commission settings.
+
+Do not double-deduct commission, double-count incentives, create fake earnings, or generate duplicate payment records.
+
+The customer and driver must see consistent totals.
+
+## 10. CANCELLATIONS, FAILURES, AND EDGE CASES
+
+Implement the following cases deliberately.
+
+### Customer cancels before acceptance
+
+The backend cancels the request, stops matching, notifies drivers, and updates the customer's screen.
+
+### Customer cancels after acceptance
+
+Use the existing cancellation policy and permissions. Display any applicable fee before final confirmation. Do not invent a charge or automatically debit an account.
+
+### Driver cancels after acceptance
+
+Release the driver assignment only through a valid backend transaction. Update the customer immediately and apply the configured re-matching policy. Do not restart a five-minute timer without a clear policy.
+
+### No driver accepts
+
+Expire the request at the server-authoritative deadline and let the customer submit a new request.
+
+### Driver loses connectivity
+
+Keep the backend's ride state authoritative. Reconnect the driver interface and restore the current ride state without duplicate assignments.
+
+### Customer refreshes or reopens the app
+
+Retrieve the current active ride from the backend and render the correct state, remaining deadline, assigned driver, OTP state, and payment status.
+
+### Duplicate button clicks
+
+Disable or safely debounce repeated actions while requests are processing. Use server-side idempotency where needed.
+
+### Real-time event is missed
+
+Reconcile the current state through an authenticated API request or reasonable polling fallback.
+
+### Browser tab is in the background
+
+The timer must remain accurate because it uses the server deadline, not the number of times the browser interval executed.
+
+### Payment failure
+
+Keep the completed trip record. Show the real payment failure and a retry option when supported. Do not recreate the trip or falsely mark it paid.
+
+### OTP failure
+
+Keep the ride at the correct status and apply the configured attempt limit.
+
+## 11. MOBILE-FIRST CUSTOMER AND DRIVER UI/UX REDESIGN
+
+UI/UX is a first-class requirement. Do not merely add fields to the existing oversized dashboard.
+
+Redesign the relevant screens to look like a polished, modern ride-hailing mobile application.
+
+Use the provided screenshots as functional references, but preserve RideNova's white, red, and black brand identity.
+
+### Mobile design principles
+
+- Design for narrow mobile screens first.
+- Support small phones, large phones, tablets, laptops, and desktop displays.
+- Use responsive CSS and fluid layouts.
+- Avoid horizontal page overflow.
+- Avoid oversized headings and giant cards.
+- Use a consistent typography scale.
+- Use readable, compact labels and secondary text.
+- Keep important actions within easy thumb reach.
+- Use consistent spacing, border radii, icons, button heights, and card padding.
+- Use appropriate contrast.
+- Include loading, success, empty, error, disabled, and retry states.
+- Keep long addresses readable and wrap them naturally.
+- Use accessible touch targets, ideally around 44 by 44 CSS pixels where practical.
+- Use safe-area spacing on mobile devices.
+- Keep dialogs within the visible viewport and make them scrollable when necessary.
+- Never allow modals to cover the only way to continue or close the screen.
+- Avoid decorative elements that obscure ride information.
+
+Use a restrained type scale, for example:
+
+- Main page title: approximately 22–28px on mobile, scaling with viewport size.
+- Section heading: approximately 16–20px.
+- Card heading: approximately 14–17px.
+- Body text: approximately 13–15px.
+- Supporting text: approximately 12–13px.
+- Compact status labels: approximately 11–12px.
+
+These are starting guidelines, not rigid values. Validate the final layout on real viewport sizes and avoid making all text the same size.
+
+### Customer request screen
+
+Create a compact, polished ride status screen containing:
+
+- Pickup and destination.
+- Ride category.
+- Estimated fare.
+- Countdown timer.
+- Current matching status.
+- Urgency-offer controls.
+- Cancel button.
+- A brief explanation of the next step.
+
+Use an attractive progress indicator and subtle animation. Do not use continuous flashing or distracting motion.
+
+### Driver active-trip screen
+
+Create a practical trip console containing:
+
+- Ride reference.
+- Current trip status.
+- Pickup and destination.
+- Map or navigation area.
+- Passenger information.
+- Call action when permitted.
+- Driver earnings estimate.
+- Appropriate status-transition button.
+- OTP entry at pickup.
+- Complete Trip button only when permitted by the ride lifecycle.
+
+Do not display all controls at once if they are not relevant to the current state.
+
+### Assignment dialog
+
+Make the driver-assigned modal responsive, compact, and easy to dismiss. It must show actual driver details and remain consistent with the active ride screen.
+
+### Tablet and desktop
+
+On wider screens, use balanced two-column layouts when useful. Do not simply stretch mobile cards to enormous widths.
+
+Maintain a clear visual hierarchy and a consistent brand system across all breakpoints.
+
+## 12. DATABASE, BACKEND, AND API REQUIREMENTS
+
+Before changing code, inspect the actual database schema, migration runner, repositories, route handlers, validators, frontend API clients, authentication middleware, and real-time hooks.
+
+Reuse existing tables and status enums when possible.
+
+Create additive migrations only where needed. Do not reset production data or overwrite existing records.
+
+Persist the necessary information, including:
+
+- Ride acceptance deadline.
+- Ride status and timestamps.
+- Assigned driver.
+- Customer incentive offer and offer version.
+- OTP verification state and expiry.
+- Final fare and fare breakdown.
+- Payment method and payment status.
+- Cancellation or expiry reason.
+- Relevant audit information.
+
+Choose appropriate names consistent with the existing schema rather than creating duplicate columns for the same concept.
+
+Ensure that migrations work with the existing migration runner and that production deployments actually execute them.
+
+Use database constraints, transactions, indexes, and appropriate concurrency control.
+
+Every endpoint must validate authentication, role, ownership, permissions, request data, and current state.
+
+Do not trust customer IDs, driver IDs, fare amounts, commission values, OTP verification flags, or payment status submitted by the browser.
+
+Use the authenticated identity from the existing authentication middleware and verify ride ownership on the server.
+
+Add or update endpoints for the necessary actions, following the project's existing route conventions:
+
+- Create ride request.
+- Retrieve the current ride state.
+- Cancel a request.
+- Update an incentive offer.
+- List eligible requests for a driver.
+- Accept a ride.
+- Update trip status.
+- Verify trip-start OTP.
+- Complete a trip.
+- Retrieve payment details or payment status where applicable.
+
+These are logical operations, not instructions to duplicate existing endpoints. Reuse and extend the current API where appropriate.
+
+Return consistent HTTP status codes and structured errors. Never report success if the database transaction failed.
+
+Do not expose database credentials, Stripe secrets, OTP secrets, or other server-only configuration in frontend bundles.
+
+## 13. REAL-TIME ARCHITECTURE
+
+Reuse RideNova's existing real-time technology and subscription hook.
+
+Inspect the current subscription filters, authorization, database publication configuration, and event delivery behavior.
+
+Ensure that the authenticated customer receives updates only for rides they own.
+
+Ensure that a driver receives only eligible requests and authorized updates for their assigned trips.
+
+Ensure that unrelated customers and drivers cannot subscribe to private ride details.
+
+Publish important events after the database transaction has committed.
+
+Use event identifiers or state reconciliation to prevent duplicate UI updates.
+
+Handle reconnections, missed events, expired sessions, and subscription cleanup.
+
+Do not open unlimited duplicate subscriptions whenever a component re-renders.
+
+If the current infrastructure does not reliably publish a particular event, implement a secure fallback that fetches the authoritative ride state.
+
+The customer must not need to manually refresh after driver acceptance, OTP verification, trip start, cancellation, trip completion, or payment-status changes.
+
+## 14. SECURITY AND PRIVACY
+
+Apply the principle of least privilege.
+
+Do not reveal the customer's phone number, exact location history, or personal details to drivers who are not assigned to that ride.
+
+Do not reveal private driver or customer data to unrelated accounts.
+
+Validate all state-changing operations on the backend.
+
+Rate-limit ride acceptance, OTP verification, cancellation, and incentive updates where appropriate.
+
+Prevent IDOR vulnerabilities by checking ride ownership and assigned-driver permissions on every relevant endpoint.
+
+Do not allow a customer to modify a driver assignment, bypass the OTP requirement, or change a completed payment's status.
+
+Do not allow an unapproved driver to accept requests.
+
+Do not expose the OTP in driver-facing payloads before verification.
+
+Keep sensitive information out of error messages and application logs.
+
+Respect the existing Clerk authentication system and server-side authorization rules. Do not replace working authentication or weaken role enforcement.
+
+## 15. REGRESSION PROTECTION — DO NOT BREAK OTHER FEATURES
+
+This requirement is mandatory.
+
+Every code change must preserve unrelated working features.
+
+Before editing:
+
+1. Inspect the repository structure.
+2. Identify the existing implementation and dependencies.
+3. Check the current ride lifecycle and database status values.
+4. Identify the customer, driver, and administrator components that depend on those values.
+5. Identify existing tests and build commands.
+6. Make a short implementation plan based on the real codebase.
+
+While editing:
+
+- Keep changes focused on the ride lifecycle and its necessary integrations.
+- Reuse existing components and shared utilities.
+- Avoid rewriting the entire application when targeted changes are sufficient.
+- Avoid renaming public interfaces without updating all consumers.
+- Do not remove existing features to simplify implementation.
+- Do not replace real API calls with mock arrays.
+- Do not hardcode success responses.
+- Do not create duplicate payment, ride, or notification systems.
+- Do not modify unrelated authentication, promo code, admin, KYC, driver profile, or payment behavior unless a change is essential and backward-compatible.
+- Preserve existing environment variable names and deployment assumptions.
+- Keep all existing working routes available.
+
+If a shared component must change, inspect all screens that use it and verify that they still work.
+
+If a database migration is required, make it backward-compatible where practical and preserve existing records.
+
+Do not silently change commission calculations, fare calculations, cancellation policies, or payment behavior.
+
+If a business rule is genuinely undefined, choose a safe, transparent default, document it, and avoid irreversible financial actions.
+
+## 16. REQUIRED END-TO-END TESTS
+
+Do not mark this task complete merely because the code compiles.
+
+Implement or update automated tests wherever the existing project supports them.
+
+At minimum, verify these scenarios.
+
+### Scenario A: Normal request
+
+1. Customer creates a ride request.
+2. The database stores the request and deadline.
+3. Customer sees the 05:00 countdown.
+4. Eligible driver receives the request.
+5. Driver accepts.
+6. Customer immediately sees the assigned-driver dialog.
+7. Countdown stops.
+8. The request disappears from other drivers' available requests.
+
+### Scenario B: Request expiry
+
+1. Customer creates a ride request.
+2. No eligible driver accepts.
+3. The countdown reaches zero.
+4. The backend expires the request.
+5. The customer sees the expiry message.
+6. The request cannot be accepted afterward.
+7. The request remains available in ride history.
+
+Use controlled test clocks or test fixtures instead of making the automated test wait five real minutes.
+
+### Scenario C: Increased incentive
+
+1. Customer creates a request with no extra incentive.
+2. Customer selects +₹100.
+3. The offer is saved and shown to eligible drivers.
+4. Customer replaces it with +₹500.
+5. Drivers receive the updated offer.
+6. The system records ₹500 as the current incentive, not ₹600.
+7. Repeated clicks do not create duplicate charges or records.
+
+### Scenario D: Competing drivers
+
+1. Two eligible drivers attempt to accept the same request concurrently.
+2. Only one acceptance succeeds.
+3. The database contains one assigned driver.
+4. The other driver receives a clear conflict response.
+5. No duplicate trip is created.
+
+### Scenario E: Immediate assignment notification
+
+1. Customer submits a request.
+2. Driver accepts from another authenticated session.
+3. Customer receives the update without refreshing.
+4. The customer sees the correct driver's real profile and vehicle information.
+5. The popup can be closed.
+6. The active ride remains visible.
+7. A page refresh restores the assigned state without duplicating the popup.
+
+### Scenario F: OTP verification
+
+1. Driver reaches pickup.
+2. Customer sees the valid OTP.
+3. Driver enters an incorrect OTP.
+4. The backend rejects it.
+5. Trip status remains unchanged.
+6. Driver enters the correct OTP.
+7. The backend verifies it.
+8. The trip can now start.
+9. A different driver cannot verify the OTP.
+10. An expired or already-used OTP cannot be reused.
+
+### Scenario G: Trip completion and payment
+
+1. Driver completes a valid IN_PROGRESS trip.
+2. Backend calculates or retrieves the authoritative fare.
+3. Customer sees the completed-trip summary.
+4. Only configured payment methods are displayed.
+5. Cash collection is recorded only after explicit confirmation.
+6. Online payment is marked successful only after trusted provider confirmation.
+7. Driver earnings and commission use the configured rules.
+8. Duplicate completion or payment requests do not double-count earnings.
+
+### Scenario H: Authentication and ownership
+
+Test customer A attempting to access customer B's ride.
+
+Test an unrelated driver attempting to retrieve private ride details.
+
+Test an unapproved driver attempting to accept a request.
+
+Test an unauthenticated user attempting to cancel, accept, or update a ride.
+
+All unauthorized operations must be rejected.
+
+### Scenario I: Responsive UI
+
+Verify the customer and driver screens at representative viewport sizes:
+
+- 320px wide small mobile.
+- 360px wide mobile.
+- 375px wide mobile.
+- 390px wide mobile.
+- 430px wide mobile.
+- Tablet.
+- Laptop.
+- Desktop.
+
+Check for horizontal overflow, clipped buttons, oversized text, broken modals, overlapping timer elements, unreadable long addresses, and inaccessible controls.
+
+Verify that both customer and driver interfaces remain usable in portrait mode.
+
+### Scenario J: Regression
+
+Verify that login, logout, role-based dashboards, driver approval, ride history, notifications, admin settings, promo codes, payment settings, and other existing working sections continue to function.
+
+Run the existing tests and production builds for the frontend and backend.
+
+Fix any new errors caused by the implementation.
+
+## 17. IMPLEMENTATION AND DELIVERY REQUIREMENTS
+
+Implement the changes directly in the existing project.
+
+Do not stop after inspecting the code and producing a checklist.
+
+Do not make backend-only changes when the task explicitly requires customer and driver UI changes.
+
+Do not create a beautiful static mockup that is disconnected from the database.
+
+Do not report that real-time updates work unless you have verified the actual subscription and state-update path.
+
+Do not report that the countdown works unless it resumes from the stored deadline and the backend enforces expiry.
+
+Do not report that OTP is secure unless the backend enforces verification before trip start.
+
+Do not report that payment works unless the actual configured payment method has been verified end to end.
+
+If a third-party credential or provider configuration is missing, implement the safe code path, identify the exact missing configuration, and clearly state which live test cannot yet be completed. Never fabricate successful verification.
+
+After implementation, provide a concise completion report containing:
+
+1. Files changed.
+2. Database migrations added or updated.
+3. Backend endpoints added or modified.
+4. Frontend screens and components changed.
+5. Real-time behavior implemented.
+6. OTP security measures implemented.
+7. Payment-flow integration completed.
+8. Tests actually executed and their results.
+9. Build results.
+10. Any remaining external configuration required.
+
+Clearly distinguish completed work from work that remains unverified.
+
+## FINAL ACCEPTANCE CRITERIA
+
+This task is complete only when:
+
+- A new ride request displays an accurate five-minute countdown.
+- The backend expires unaccepted requests reliably.
+- Customers can select and update the configured extra driver incentive.
+- Eligible drivers receive real request and incentive updates.
+- Only one driver can accept a request.
+- The customer receives an immediate assignment notification without refreshing.
+- The customer's active ride screen updates automatically.
+- Driver details are real and authorized.
+- The trip-start OTP is generated and verified securely.
+- A trip cannot start without successful OTP verification.
+- Ride status changes propagate correctly to the customer and driver.
+- Trip completion leads to the correct payment flow.
+- Payment status is not fabricated.
+- Customer, driver, and platform earnings are calculated consistently.
+- The mobile UI is polished and responsive.
+- Existing application features continue to work.
+- Database records survive refreshes and application restarts.
+- Tests and production builds pass, and all remaining limitations are honestly reported.
+
+Start by inspecting the actual existing implementation, then implement the complete feature set in small, compatible changes. Prioritize correctness, security, responsive UI/UX, persistent data, and regression prevention. Do not declare success until the acceptance criteria have been verified.

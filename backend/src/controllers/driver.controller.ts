@@ -424,6 +424,57 @@ export const driverController = {
   },
 
   /**
+   * POST /api/driver/rides/:id/verify-otp
+   * Verify passenger trip-start OTP and transition ride to ride_started
+   */
+  async verifyOtp(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Authentication required' },
+        });
+        return;
+      }
+
+      const { id } = req.params;
+      const { otp } = req.body || {};
+
+      if (!otp || typeof otp !== 'string' || otp.trim().length !== 4) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: 'INVALID_OTP_FORMAT',
+            message: 'Please enter a valid 4-digit verification code.',
+          },
+        });
+        return;
+      }
+
+      const result = await driverService.verifyTripOtp(req.user.id, id, otp.trim());
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: 'INVALID_OTP',
+            message: result.message || 'OTP verification failed.',
+          },
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        message: result.message || 'OTP verified! Trip has started.',
+        data: result.ride,
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  /**
    * GET /api/driver/history
    * Retrieve driver's past rides
    */

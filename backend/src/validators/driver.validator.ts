@@ -4,6 +4,15 @@ export const updateDriverProfileSchema = z.object({
   name: z.string().min(1, 'Name cannot be empty').max(255).optional(),
   phone: z.string().max(50).optional(),
   licenseNumber: z.string().min(3, 'License number must be at least 3 characters').max(100).optional(),
+  profilePhotoUrl: z.string().optional().nullable(),
+  upiId: z.string().optional().nullable(),
+  operatingCity: z.string().optional().nullable(),
+  preferredLanguage: z.string().optional().nullable(),
+  dob: z.string().optional().nullable(),
+  address: z.string().optional().nullable(),
+  autoAcceptRides: z.boolean().optional(),
+  workingHoursPreference: z.string().optional().nullable(),
+  quietRidePreference: z.boolean().optional(),
 });
 
 export const vehicleSchema = z.object({

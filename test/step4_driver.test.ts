@@ -488,6 +488,54 @@ async function runStep4Tests() {
       acceptSecondNow.status === 200 && acceptSecondNow.body?.data?.status === 'accepted',
       'TEST 23: After completion, Driver 1 is free to accept new incoming rides'
     );
+
+    // Test 24: Driver cannot go offline while having an active accepted on-demand trip
+    const goOfflineWithActiveTrip = await requestApi('/api/driver/availability', {
+      method: 'PATCH',
+      token: driver1Token,
+      body: { isOnline: false },
+    });
+    assert(
+      goOfflineWithActiveTrip.status === 400 &&
+        goOfflineWithActiveTrip.body?.error?.message?.includes('active on-demand trip'),
+      'TEST 24: Driver attempting to switch offline while on accepted ride is rejected with HTTP 400'
+    );
+
+    // Test 25: Rider can see OTP, driver active-ride hides OTP
+    const riderViewRide = await requestApi(`/api/rides/${secondRideId}`, { token: riderToken });
+    const otpCode = riderViewRide.body?.data?.otp_code;
+    assert(
+      typeof otpCode === 'string' && otpCode.length === 4,
+      'TEST 25a: Rider sees 4-digit verification OTP on accepted ride'
+    );
+
+    const driverViewRide = await requestApi('/api/driver/active-ride', { token: driver1Token });
+    assert(
+      driverViewRide.body?.data?.otp_code === undefined,
+      'TEST 25b: Driver active-ride response hides plaintext passenger OTP'
+    );
+
+    // Test 26: Driver submits wrong OTP -> rejected
+    const wrongOtpRes = await requestApi(`/api/driver/rides/${secondRideId}/verify-otp`, {
+      method: 'POST',
+      token: driver1Token,
+      body: { otp: '9999' === otpCode ? '1111' : '9999' },
+    });
+    assert(
+      wrongOtpRes.status === 400 && wrongOtpRes.body?.error?.code === 'INVALID_OTP',
+      'TEST 26: Driver entering wrong OTP is rejected with HTTP 400 INVALID_OTP'
+    );
+
+    // Test 27: Driver submits correct OTP -> transitions to ride_started
+    const correctOtpRes = await requestApi(`/api/driver/rides/${secondRideId}/verify-otp`, {
+      method: 'POST',
+      token: driver1Token,
+      body: { otp: otpCode },
+    });
+    assert(
+      correctOtpRes.status === 200 && correctOtpRes.body?.data?.status === 'ride_started',
+      'TEST 27: Correct OTP submission transitions ride to "ride_started"'
+    );
   } finally {
     server.close();
   }

@@ -44,6 +44,17 @@ let memoryCommissionSettings = {
   effective_date: new Date().toISOString(),
 };
 
+let memoryMatchingSettings = {
+  request_timeout_minutes: 5,
+  min_timeout_minutes: 1,
+  max_timeout_minutes: 10,
+  priority_tier_1_amount: 100.00,
+  priority_tier_2_amount: 500.00,
+  priority_tier_3_amount: 1000.00,
+  priority_enabled: true,
+  updated_at: new Date().toISOString(),
+};
+
 let memoryPaymentMethods: any[] = [
   { id: 'pm_stripe', name: 'Stripe Checkout', description: 'Credit Card, Debit Card, Apple Pay', type: 'provider', is_active: true, display_order: 1 },
   { id: 'pm_upi', name: 'UPI QR & ID', description: 'Google Pay, PhonePe, Paytm, BHIM', type: 'manual_upi', is_active: true, display_order: 2 },
@@ -403,7 +414,7 @@ export const extendedRepository = {
     if (isDatabaseConfigured()) {
       try {
         const res = await query<PromoCode>(
-          `SELECT * FROM promo_codes WHERE UPPER(code) = $1 AND is_active = TRUE LIMIT 1`,
+          `SELECT * FROM promo_codes WHERE UPPER(code) = $1 LIMIT 1`,
           [cleanCode]
         );
         if (res.rows.length > 0) {
@@ -419,7 +430,16 @@ export const extendedRepository = {
     }
 
     if (!promo || !promo.is_active) {
-      return { valid: false, discount: 0, finalFare: fare, message: 'Invalid or expired promotional code.' };
+      return { valid: false, discount: 0, finalFare: fare, message: 'Invalid or inactive promo code.' };
+    }
+
+    const now = new Date();
+    if (promo.starts_at && new Date(promo.starts_at) > now) {
+      return { valid: false, discount: 0, finalFare: fare, message: `Promo code ${promo.code} is scheduled to start at ${new Date(promo.starts_at).toLocaleString()}.` };
+    }
+
+    if (promo.expires_at && new Date(promo.expires_at) < now) {
+      return { valid: false, discount: 0, finalFare: fare, message: `Promo code ${promo.code} expired on ${new Date(promo.expires_at).toLocaleDateString()}.` };
     }
 
     if (promo.usage_limit && promo.used_count >= promo.usage_limit) {
@@ -466,7 +486,9 @@ export const extendedRepository = {
         logger.error('Error fetching promos', { error: (err as Error).message });
       }
     }
-    return Array.from(memoryPromos.values());
+    return Array.from(memoryPromos.values()).sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
   },
 
   async createPromo(data: {
@@ -476,13 +498,17 @@ export const extendedRepository = {
     minimum_fare?: number;
     maximum_discount?: number;
     usage_limit?: number;
+    starts_at?: string;
+    expires_at?: string;
+    is_active?: boolean;
   }): Promise<PromoCode> {
     const cleanCode = data.code.toUpperCase().trim();
+    const isActive = data.is_active !== undefined ? Boolean(data.is_active) : true;
     if (isDatabaseConfigured()) {
       try {
         const res = await query<PromoCode>(
-          `INSERT INTO promo_codes (code, discount_type, discount_value, minimum_fare, maximum_discount, usage_limit, is_active)
-           VALUES ($1, $2, $3, $4, $5, $6, TRUE)
+          `INSERT INTO promo_codes (code, discount_type, discount_value, minimum_fare, maximum_discount, usage_limit, starts_at, expires_at, is_active)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
            RETURNING *`,
           [
             cleanCode,
@@ -491,6 +517,9 @@ export const extendedRepository = {
             data.minimum_fare || 0,
             data.maximum_discount || null,
             data.usage_limit || null,
+            data.starts_at || null,
+            data.expires_at || null,
+            isActive,
           ]
         );
         return res.rows[0];
@@ -508,13 +537,100 @@ export const extendedRepository = {
       maximum_discount: data.maximum_discount || null,
       usage_limit: data.usage_limit || null,
       used_count: 0,
-      is_active: true,
+      starts_at: data.starts_at || null,
+      expires_at: data.expires_at || null,
+      is_active: isActive,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
     memoryPromos.set(cleanCode, newPromo);
     return newPromo;
   },
+
+  async updatePromo(id: string, data: any): Promise<PromoCode | null> {
+    const allowed = ['code', 'discount_type', 'discount_value', 'minimum_fare', 'maximum_discount', 'usage_limit', 'starts_at', 'expires_at', 'is_active'];
+    const sanitized: Record<string, any> = {};
+    for (const key of allowed) {
+      if (data[key] !== undefined) {
+        if (key === 'code' && typeof data[key] === 'string') {
+          sanitized[key] = data[key].toUpperCase().trim();
+        } else {
+          sanitized[key] = data[key];
+        }
+      }
+    }
+
+    if (Object.keys(sanitized).length === 0) {
+      // Nothing to update, return existing
+      if (isDatabaseConfigured()) {
+        const res = await query<PromoCode>(`SELECT * FROM promo_codes WHERE id = $1`, [id]);
+        return res.rows[0] || null;
+      }
+      for (const promo of memoryPromos.values()) {
+        if (promo.id === id) return promo;
+      }
+      return null;
+    }
+
+    if (isDatabaseConfigured()) {
+      try {
+        const setClauses: string[] = [];
+        const values: any[] = [];
+        let idx = 1;
+        for (const [key, val] of Object.entries(sanitized)) {
+          setClauses.push(`${key} = $${idx++}`);
+          values.push(val);
+        }
+        values.push(id);
+        const res = await query<PromoCode>(
+          `UPDATE promo_codes SET ${setClauses.join(', ')}, updated_at = NOW() WHERE (id = $${idx} OR UPPER(code) = UPPER($${idx})) RETURNING *`,
+          values
+        );
+        return res.rows[0] || null;
+      } catch (err) {
+        logger.error('Error updating promo in PostgreSQL', { error: (err as Error).message });
+      }
+    }
+
+    for (const [oldCode, promo] of memoryPromos.entries()) {
+      if (promo.id === id || promo.code.toUpperCase() === id.toUpperCase()) {
+        const newCode = sanitized.code || promo.code;
+        const updated: PromoCode = {
+          ...promo,
+          ...sanitized,
+          code: newCode,
+          updated_at: new Date().toISOString(),
+        };
+        if (newCode !== oldCode) {
+          memoryPromos.delete(oldCode);
+        }
+        memoryPromos.set(newCode, updated);
+        return updated;
+      }
+    }
+    return null;
+  },
+
+  async deletePromo(id: string): Promise<boolean> {
+    if (isDatabaseConfigured()) {
+      try {
+        const res = await query(`DELETE FROM promo_codes WHERE (id = $1 OR UPPER(code) = UPPER($1)) AND used_count = 0`, [id]);
+        return (res.rowCount || 0) > 0;
+      } catch (err) {
+        logger.error('Error deleting promo from PostgreSQL', { error: (err as Error).message });
+      }
+    }
+
+    for (const [code, promo] of memoryPromos.entries()) {
+      if (promo.id === id || promo.code.toUpperCase() === id.toUpperCase()) {
+        if (promo.used_count > 0) return false;
+        memoryPromos.delete(code);
+        return true;
+      }
+    }
+    return false;
+  },
+
 
   // ==================== NOTIFICATIONS ====================
   async getUserNotifications(userId: string): Promise<Notification[]> {
@@ -1059,5 +1175,45 @@ export const extendedRepository = {
 
   async getAllDriverEarnings() {
     return Array.from(memoryEarnings.values());
+  },
+
+  async getMatchingSettings() {
+    if (isDatabaseConfigured()) {
+      try {
+        const res = await query(`SELECT * FROM matching_settings LIMIT 1`);
+        if (res.rows.length > 0) return res.rows[0];
+      } catch (err) {
+        logger.error('Error fetching matching settings', { error: (err as Error).message });
+      }
+    }
+    return memoryMatchingSettings;
+  },
+
+  async updateMatchingSettings(data: any) {
+    if (isDatabaseConfigured()) {
+      try {
+        await query(
+          `UPDATE matching_settings SET 
+            request_timeout_minutes = COALESCE($1, request_timeout_minutes),
+            priority_tier_1_amount = COALESCE($2, priority_tier_1_amount),
+            priority_tier_2_amount = COALESCE($3, priority_tier_2_amount),
+            priority_tier_3_amount = COALESCE($4, priority_tier_3_amount),
+            priority_enabled = COALESCE($5, priority_enabled),
+            updated_at = NOW()`,
+          [
+            data.request_timeout_minutes,
+            data.priority_tier_1_amount,
+            data.priority_tier_2_amount,
+            data.priority_tier_3_amount,
+            data.priority_enabled,
+          ]
+        );
+        return this.getMatchingSettings();
+      } catch (err) {
+        logger.error('Error updating matching settings', { error: (err as Error).message });
+      }
+    }
+    memoryMatchingSettings = { ...memoryMatchingSettings, ...data, updated_at: new Date().toISOString() };
+    return memoryMatchingSettings;
   },
 };

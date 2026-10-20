@@ -19,6 +19,7 @@ import {
   Phone,
   Power,
   XCircle,
+  X,
   ChevronRight,
   Check,
   Compass,
@@ -75,12 +76,16 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({ onNavigate }) 
   const [history, setHistory] = useState<RideWithStops[]>([]);
   const [earnings, setEarnings] = useState<DriverEarningsSummary | null>(null);
   const [payouts, setPayouts] = useState<DriverPayout[]>([]);
+  const [paymentFlowStep, setPaymentFlowStep] = useState<'none' | 'summary' | 'method_select' | 'upi_qr' | 'cash' | 'success'>('none');
+  const [completedRideForPayment, setCompletedRideForPayment] = useState<any | null>(null);
 
   // UI state
   const [loading, setLoading] = useState<boolean>(true);
   const [actionLoading, setActionLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [showDriverCancelModal, setShowDriverCancelModal] = useState(false);
+  const [driverCancelReason, setDriverCancelReason] = useState('Vehicle breakdown / mechanical issue');
 
   // KYC Modal state
   const [isKycModalOpen, setIsKycModalOpen] = useState<boolean>(false);
@@ -269,6 +274,15 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({ onNavigate }) 
     try {
       const nextOnline = !profile.isOnline;
 
+      if (!nextOnline) {
+        const onDemandStatuses = ['accepted', 'driver_arriving', 'driver_arrived', 'ride_started'];
+        if (activeRide && onDemandStatuses.includes(activeRide.status)) {
+          showError('Cannot switch to offline while you have an active on-demand trip in progress. Please complete or cancel this trip first.');
+          setActionLoading(false);
+          return;
+        }
+      }
+
       // Browser Geolocation integration
       let lat = profile.currentLatitude || 28.6139;
       let lng = profile.currentLongitude || 77.209;
@@ -363,13 +377,16 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({ onNavigate }) 
     try {
       const res = await api.updateRideStatus(activeRide.id, status, reason);
       if (res.success && res.data) {
-        if (status === 'ride_completed' || status === 'cancelled') {
+        if (status === 'ride_completed') {
+          const completedRide = activeRide;
           setActiveRide(null);
-          showSuccess(
-            status === 'ride_completed'
-              ? 'Trip completed! Fare added to your earnings balance (85% net split).'
-              : 'Trip cancelled.'
-          );
+          setCompletedRideForPayment(completedRide);
+          setPaymentFlowStep('summary');
+          loadDriverData();
+          showSuccess('Trip completed! Proceeding to payment collection workflow.');
+        } else if (status === 'cancelled') {
+          setActiveRide(null);
+          showSuccess('Trip cancelled.');
           loadDriverData();
           setActiveTab('earnings');
         } else {
@@ -1267,9 +1284,7 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({ onNavigate }) 
                     {/* Cancel Trip Option */}
                     <button
                       type="button"
-                      onClick={() => {
-                        handleUpdateRideStatus('cancelled', 'Driver cancellation (operational delay)');
-                      }}
+                      onClick={() => setShowDriverCancelModal(true)}
                       className="w-full text-center text-xs text-[#B91C1C] hover:underline pt-2 font-medium cursor-pointer"
                     >
                       Cancel Trip (Driver Discretion)
@@ -2421,6 +2436,367 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({ onNavigate }) 
                 className="text-xs text-[#737373] hover:underline pt-2 cursor-pointer font-medium"
               >
                 Close Safety Console
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DRIVER TRIP PAYMENT COLLECTION & SUMMARY WORKFLOW MODAL */}
+      {paymentFlowStep !== 'none' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-fade-in overflow-y-auto">
+          <div className="w-full max-w-md rounded-2xl border border-[#E5E5E5] bg-[#FFFFFF] p-6 shadow-2xl space-y-5 my-8">
+            {/* STEP 1: TRIP SUMMARY */}
+            {paymentFlowStep === 'summary' && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-[#E5E5E5]">
+                  <h3 className="text-base font-extrabold text-[#171717]">Trip Summary</h3>
+                  <span className="px-2.5 py-1 rounded-full bg-[#15803D]/10 text-[#15803D] text-[10px] font-bold uppercase">
+                    Completed
+                  </span>
+                </div>
+
+                <div className="rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] p-4 space-y-3 text-xs">
+                  <div className="flex items-start gap-2.5">
+                    <div className="h-3 w-3 rounded-full bg-[#15803D] mt-1 shrink-0" />
+                    <div>
+                      <span className="text-[10px] text-[#737373] uppercase font-bold block">Pickup</span>
+                      <p className="font-bold text-[#171717]">{completedRideForPayment?.pickup_address || 'Vijay Nagar, Indore'}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2.5">
+                    <div className="h-3 w-3 rounded-full bg-[#E21D2B] mt-1 shrink-0" />
+                    <div>
+                      <span className="text-[10px] text-[#737373] uppercase font-bold block">Drop-off</span>
+                      <p className="font-bold text-[#171717]">{completedRideForPayment?.destination_address || 'Phoenix Mall, Indore'}</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#E5E5E5] text-[11px] text-[#737373]">
+                    <span>Distance: <strong className="text-[#171717]">{completedRideForPayment?.distance_km || 5.2} km</strong></span>
+                    <span>Duration: <strong className="text-[#171717]">14 min</strong></span>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-[#E5E5E5] bg-white p-4 space-y-2 text-xs">
+                  <h4 className="font-bold text-[#171717] uppercase tracking-wider text-[10px] pb-1 border-b border-[#E5E5E5]">
+                    Earnings Breakdown
+                  </h4>
+                  <div className="flex justify-between py-1">
+                    <span className="text-[#737373]">Total Fare</span>
+                    <span className="font-bold text-[#171717]">₹{completedRideForPayment?.final_fare || completedRideForPayment?.estimated_fare || 120}</span>
+                  </div>
+                  <div className="flex justify-between py-1">
+                    <span className="text-[#737373]">Platform Commission (15%)</span>
+                    <span className="font-bold text-[#B91C1C]">-₹{((Number(completedRideForPayment?.final_fare || completedRideForPayment?.estimated_fare || 120)) * 0.15).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between py-2 border-t border-[#E5E5E5] text-sm font-black text-[#15803D]">
+                    <span>Your Earnings</span>
+                    <span>₹{((Number(completedRideForPayment?.final_fare || completedRideForPayment?.estimated_fare || 120)) * 0.85).toFixed(2)}</span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setPaymentFlowStep('method_select')}
+                  className="w-full rounded-xl bg-[#E21D2B] py-3 text-xs font-bold text-white hover:bg-[#BE1622] transition-all shadow-md cursor-pointer"
+                >
+                  Proceed to Payment
+                </button>
+              </div>
+            )}
+
+            {/* STEP 2: SELECT PAYMENT METHOD */}
+            {paymentFlowStep === 'method_select' && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-[#E5E5E5]">
+                  <button onClick={() => setPaymentFlowStep('summary')} className="text-xs font-bold text-[#737373] hover:text-[#171717] cursor-pointer">
+                    ← Back
+                  </button>
+                  <h3 className="text-base font-extrabold text-[#171717]">Collect Payment</h3>
+                  <div />
+                </div>
+
+                <div className="text-center py-2 bg-[#FAFAFA] rounded-xl border border-[#E5E5E5]">
+                  <span className="text-[10px] text-[#737373] uppercase font-bold block">Total Amount</span>
+                  <p className="text-3xl font-black text-[#171717]">₹{completedRideForPayment?.final_fare || completedRideForPayment?.estimated_fare || 120}</p>
+                  <span className="text-[11px] text-[#737373]">Collect payment from rider</span>
+                </div>
+
+                <div className="space-y-2.5 text-xs">
+                  <div
+                    onClick={() => setPaymentFlowStep('upi_qr')}
+                    className="flex items-center justify-between p-3.5 rounded-xl border border-[#E5E5E5] hover:border-[#E21D2B] cursor-pointer transition-all bg-white"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="h-9 w-9 rounded-lg bg-[#FFF1F2] text-[#E21D2B] flex items-center justify-center font-bold">
+                        UPI
+                      </div>
+                      <div>
+                        <p className="font-bold text-[#171717]">UPI / QR Code</p>
+                        <p className="text-[11px] text-[#737373]">Rider scans and pays via GPay, PhonePe, Paytm</p>
+                      </div>
+                    </div>
+                    <span className="font-bold text-[#E21D2B]">→</span>
+                  </div>
+
+                  <div
+                    onClick={() => setPaymentFlowStep('cash')}
+                    className="flex items-center justify-between p-3.5 rounded-xl border border-[#E5E5E5] hover:border-[#15803D] cursor-pointer transition-all bg-white"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="h-9 w-9 rounded-lg bg-[#ECFDF5] text-[#15803D] flex items-center justify-center font-bold">
+                        ₹
+                      </div>
+                      <div>
+                        <p className="font-bold text-[#171717]">Cash</p>
+                        <p className="text-[11px] text-[#737373]">Rider pays in physical cash directly</p>
+                      </div>
+                    </div>
+                    <span className="font-bold text-[#15803D]">→</span>
+                  </div>
+
+                  <div
+                    onClick={() => setPaymentFlowStep('success')}
+                    className="flex items-center justify-between p-3.5 rounded-xl border border-[#E5E5E5] hover:border-[#2563EB] cursor-pointer transition-all bg-white"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="h-9 w-9 rounded-lg bg-[#EFF6FF] text-[#2563EB] flex items-center justify-center font-bold">
+                        💳
+                      </div>
+                      <div>
+                        <p className="font-bold text-[#171717]">Card / Stripe Online</p>
+                        <p className="text-[11px] text-[#737373]">Rider pays via saved card or Stripe link</p>
+                      </div>
+                    </div>
+                    <span className="font-bold text-[#2563EB]">→</span>
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-center text-[#737373] pt-1">
+                  🔒 Payment is secure and recorded automatically in ledger.
+                </p>
+              </div>
+            )}
+
+            {/* STEP 3: UPI / QR PAYMENT */}
+            {paymentFlowStep === 'upi_qr' && (
+              <div className="space-y-4 text-center">
+                <div className="flex items-center justify-between pb-3 border-b border-[#E5E5E5]">
+                  <button onClick={() => setPaymentFlowStep('method_select')} className="text-xs font-bold text-[#737373] hover:text-[#171717] cursor-pointer">
+                    ← Back
+                  </button>
+                  <h3 className="text-base font-extrabold text-[#171717]">Collect via UPI</h3>
+                  <div />
+                </div>
+
+                <div>
+                  <span className="text-2xl font-black text-[#171717]">₹{completedRideForPayment?.final_fare || completedRideForPayment?.estimated_fare || 120}</span>
+                  <p className="text-[11px] text-[#737373]">Ask rider to scan this QR code</p>
+                </div>
+
+                <div className="bg-white p-3 rounded-2xl border border-[#E5E5E5] inline-block shadow-xs">
+                  <img
+                    src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=upi://pay?pa=ridenova@upi&pn=RideNova"
+                    alt="UPI QR Code"
+                    className="w-44 h-44 mx-auto rounded-lg"
+                  />
+                  <p className="font-mono text-xs font-bold text-[#E21D2B] mt-2">UPI ID: ridenova@upi</p>
+                </div>
+
+                <div className="flex items-center justify-center gap-4 py-1 text-[10px] text-[#737373]">
+                  <span>Google Pay</span> · <span>PhonePe</span> · <span>Paytm</span> · <span>BHIM UPI</span>
+                </div>
+
+                <div className="p-3 rounded-xl bg-[#FAFAFA] border border-[#E5E5E5] text-xs flex items-center justify-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-[#E21D2B]" />
+                  <span className="font-medium text-[#737373]">Waiting for payment... This will confirm automatically.</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentFlowStep('success')}
+                    className="rounded-xl bg-[#15803D] py-2.5 text-xs font-bold text-white hover:bg-[#15803D]/90 cursor-pointer"
+                  >
+                    Confirm Paid
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentFlowStep('method_select')}
+                    className="rounded-xl border border-[#E5E5E5] py-2.5 text-xs font-bold text-[#B91C1C] hover:bg-[#FFF1F2] cursor-pointer"
+                  >
+                    Cancel Payment
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* STEP 4: CASH PAYMENT */}
+            {paymentFlowStep === 'cash' && (
+              <div className="space-y-4 text-center">
+                <div className="flex items-center justify-between pb-3 border-b border-[#E5E5E5]">
+                  <button onClick={() => setPaymentFlowStep('method_select')} className="text-xs font-bold text-[#737373] hover:text-[#171717] cursor-pointer">
+                    ← Back
+                  </button>
+                  <h3 className="text-base font-extrabold text-[#171717]">Collect Cash</h3>
+                  <div />
+                </div>
+
+                <div>
+                  <span className="text-3xl font-black text-[#171717]">₹{completedRideForPayment?.final_fare || completedRideForPayment?.estimated_fare || 120}</span>
+                  <p className="text-[11px] text-[#737373]">Collect physical cash from rider</p>
+                </div>
+
+                <div className="py-4">
+                  <div className="h-16 w-16 mx-auto rounded-2xl bg-[#ECFDF5] text-[#15803D] flex items-center justify-center text-3xl font-black shadow-xs">
+                    💵
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-xl bg-[#FFFBEB] border border-[#FDE68A] text-xs text-[#92400E] text-left">
+                  ℹ️ After confirming, ₹{((Number(completedRideForPayment?.final_fare || completedRideForPayment?.estimated_fare || 120)) * 0.85).toFixed(2)} will be credited to your earnings (15% platform commission automatically recorded).
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setPaymentFlowStep('success')}
+                  className="w-full rounded-xl bg-[#E21D2B] py-3 text-xs font-bold text-white hover:bg-[#BE1622] transition-all shadow-md cursor-pointer"
+                >
+                  Confirm Cash Received
+                </button>
+              </div>
+            )}
+
+            {/* STEP 5: PAYMENT SUCCESSFUL */}
+            {paymentFlowStep === 'success' && (
+              <div className="space-y-4 text-center">
+                <div className="h-14 w-14 mx-auto rounded-full bg-[#ECFDF5] text-[#15803D] flex items-center justify-center text-2xl font-black shadow-sm">
+                  ✓
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-black text-[#171717]">Payment Successful</h3>
+                  <span className="text-2xl font-black text-[#15803D] block mt-1">₹{completedRideForPayment?.final_fare || completedRideForPayment?.estimated_fare || 120}</span>
+                  <p className="text-[11px] text-[#737373]">Payment collected & recorded successfully</p>
+                </div>
+
+                <div className="rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] p-3 text-xs space-y-1.5 text-left">
+                  <div className="flex justify-between">
+                    <span className="text-[#737373]">Total Fare</span>
+                    <span className="font-bold text-[#171717]">₹{completedRideForPayment?.final_fare || completedRideForPayment?.estimated_fare || 120}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[#737373]">Platform Commission (15%)</span>
+                    <span className="font-bold text-[#B91C1C]">-₹{((Number(completedRideForPayment?.final_fare || completedRideForPayment?.estimated_fare || 120)) * 0.15).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between pt-1 border-t border-[#E5E5E5] font-black text-[#15803D]">
+                    <span>Your Earnings</span>
+                    <span>₹{((Number(completedRideForPayment?.final_fare || completedRideForPayment?.estimated_fare || 120)) * 0.85).toFixed(2)}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPaymentFlowStep('none');
+                      setCompletedRideForPayment(null);
+                      setActiveTab('earnings');
+                    }}
+                    className="w-full rounded-xl bg-[#15803D] py-3 text-xs font-bold text-white hover:bg-[#15803D]/90 transition-all shadow-md cursor-pointer"
+                  >
+                    View Earnings Ledger
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPaymentFlowStep('none');
+                      setCompletedRideForPayment(null);
+                      setActiveTab('dashboard');
+                    }}
+                    className="w-full rounded-xl border border-[#E5E5E5] bg-white py-2.5 text-xs font-bold text-[#171717] hover:bg-[#FAFAFA] cursor-pointer"
+                  >
+                    Go to Home
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {/* Driver Cancellation Modal */}
+      {showDriverCancelModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 animate-fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-[#E5E5E5] relative space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E5E5E5]">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-full bg-[#B91C1C]/10 flex items-center justify-center text-[#B91C1C]">
+                  <AlertCircle className="h-4 w-4" />
+                </div>
+                <h3 className="text-sm font-bold text-[#171717]">Cancel Active Trip</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDriverCancelModal(false)}
+                className="p-1.5 rounded-lg text-[#737373] hover:bg-[#FAFAFA] cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-xs text-[#737373]">
+                Please select the reason for cancelling this active trip:
+              </p>
+              <div className="space-y-2">
+                {[
+                  'Vehicle breakdown / mechanical issue',
+                  'Passenger no-show or unreachable',
+                  'Severe traffic / emergency',
+                  'Other operational delay',
+                ].map((reason) => (
+                  <label
+                    key={reason}
+                    className={`flex items-center gap-3 p-3 rounded-xl border text-xs font-medium cursor-pointer transition-all ${
+                      driverCancelReason === reason
+                        ? 'border-[#B91C1C] bg-[#FFF1F2]/40 text-[#171717]'
+                        : 'border-[#E5E5E5] bg-white text-[#737373] hover:border-[#737373]'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="driverCancelReason"
+                      value={reason}
+                      checked={driverCancelReason === reason}
+                      onChange={(e) => setDriverCancelReason(e.target.value)}
+                      className="text-[#B91C1C] focus:ring-[#B91C1C]"
+                    />
+                    <span>{reason}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E5E5E5]">
+              <button
+                type="button"
+                onClick={() => setShowDriverCancelModal(false)}
+                disabled={actionLoading}
+                className="px-4 py-2 rounded-xl border border-[#E5E5E5] bg-white text-xs font-bold text-[#171717] hover:bg-[#FAFAFA] cursor-pointer"
+              >
+                Resume Trip
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setShowDriverCancelModal(false);
+                  await handleUpdateRideStatus('cancelled', driverCancelReason);
+                }}
+                disabled={actionLoading}
+                className="px-5 py-2 rounded-xl bg-[#B91C1C] text-white text-xs font-bold hover:bg-[#991B1B] transition-colors shadow-sm flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {actionLoading && <Loader2 className="h-3 w-3 animate-spin" />}
+                <span>Confirm Trip Cancellation</span>
               </button>
             </div>
           </div>

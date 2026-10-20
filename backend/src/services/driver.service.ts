@@ -32,6 +32,13 @@ export interface SanitizedDriverProfile {
   bankAccountNumberMasked?: string | null;
   bankIfsc?: string | null;
   bankStatus?: string | null;
+  upiId?: string | null;
+  operatingCity?: string | null;
+  preferredLanguage?: string | null;
+  profilePhotoUrl?: string | null;
+  autoAcceptRides?: boolean;
+  workingHoursPreference?: string | null;
+  quietRidePreference?: boolean;
   kycSubmittedAt?: string | null;
   rejectionReason?: string | null;
   vehicle: Vehicle | null;
@@ -118,6 +125,13 @@ export const driverService = {
       bankAccountNumberMasked: driver.bank_account_number_masked || null,
       bankIfsc: driver.bank_ifsc || null,
       bankStatus: driver.bank_status || 'unverified',
+      upiId: driver.upi_id || null,
+      operatingCity: driver.operating_city || null,
+      preferredLanguage: driver.preferred_language || 'English',
+      profilePhotoUrl: driver.profile_photo_url || null,
+      autoAcceptRides: driver.auto_accept_rides ?? false,
+      workingHoursPreference: driver.working_hours_preference || 'flexible',
+      quietRidePreference: driver.quiet_ride_preference ?? false,
       kycSubmittedAt: driver.kyc_submitted_at || null,
       rejectionReason: driver.rejection_reason || null,
       vehicle: driver.vehicle || null,
@@ -127,11 +141,24 @@ export const driverService = {
   },
 
   /**
-   * Update driver contact details and license number
+   * Update driver contact details and profile
    */
   async updateDriverProfile(
     userId: string,
-    updates: { name?: string; phone?: string; licenseNumber?: string }
+    updates: {
+      name?: string;
+      phone?: string;
+      licenseNumber?: string;
+      profilePhotoUrl?: string | null;
+      upiId?: string | null;
+      operatingCity?: string | null;
+      preferredLanguage?: string | null;
+      dob?: string | null;
+      address?: string | null;
+      autoAcceptRides?: boolean;
+      workingHoursPreference?: string | null;
+      quietRidePreference?: boolean;
+    }
   ): Promise<SanitizedDriverProfile> {
     const driver = await driverRepository.findOrCreate(userId);
 
@@ -145,6 +172,18 @@ export const driverService = {
     if (updates.licenseNumber) {
       await driverRepository.updateLicense(driver.id, updates.licenseNumber);
     }
+
+    await driverRepository.updateExtendedProfile(driver.id, {
+      profile_photo_url: updates.profilePhotoUrl,
+      upi_id: updates.upiId,
+      operating_city: updates.operatingCity,
+      preferred_language: updates.preferredLanguage,
+      dob: updates.dob,
+      address: updates.address,
+      auto_accept_rides: updates.autoAcceptRides,
+      working_hours_preference: updates.workingHoursPreference,
+      quiet_ride_preference: updates.quietRidePreference,
+    });
 
     return this.getDriverProfile(userId);
   },
@@ -200,6 +239,19 @@ export const driverService = {
       // 2. Eligibility Check: Vehicle registration
       if (!driver.vehicle) {
         throw new ValidationError('You must register and save a vehicle before going online.');
+      }
+    } else {
+      // Driver attempting to go offline:
+      // Prevent drivers from switching to Offline while they have an accepted or active on-demand trip.
+      // Drivers may go Offline when they have only future scheduled rides, provided they remain assigned to those bookings.
+      const activeRide = await rideRepository.findActiveRideForDriver(driver.id);
+      if (activeRide) {
+        const onDemandStatuses: RideStatus[] = ['accepted', 'driver_arriving', 'driver_arrived', 'ride_started'];
+        if (onDemandStatuses.includes(activeRide.status)) {
+          throw new ValidationError(
+            'Cannot switch to offline while you have an active on-demand trip in progress. Please complete or cancel this trip first.'
+          );
+        }
       }
     }
 
@@ -370,6 +422,14 @@ export const driverService = {
     });
 
     return updated;
+  },
+
+  /**
+   * Verify trip-start OTP entered by driver
+   */
+  async verifyTripOtp(userId: string, rideId: string, otp: string) {
+    const driver = await driverRepository.findOrCreate(userId);
+    return rideRepository.verifyTripOtp(rideId, driver.id, otp);
   },
 
   /**

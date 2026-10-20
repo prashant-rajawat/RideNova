@@ -27,6 +27,7 @@ router.post('/rides/:id/accept', driverController.acceptRide);
 // Active Ride & Status Updates
 router.get('/active-ride', driverController.getActiveRide);
 router.patch('/rides/:id/status', driverController.updateRideStatus);
+router.post('/rides/:id/verify-otp', driverController.verifyOtp);
 
 // History, Earnings & Payouts
 router.get('/history', driverController.getHistory);

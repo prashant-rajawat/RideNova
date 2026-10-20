@@ -1,7 +1,6 @@
-import React from 'react';
-import { LogOut, Home, User } from 'lucide-react';
-
-interface NavItem {
+import React, { useState } from 'react';
+import { LogOut, Menu, X } from 'lucide-react';
+export interface NavItem {
   id: string;
   label: string;
   icon: React.ElementType;
@@ -10,16 +9,15 @@ interface NavItem {
   highlight?: boolean;
 }
 
-interface DashboardLayoutProps {
-  role: 'CUSTOMER' | 'DRIVER' | 'ADMIN' | 'RIDER' | string;
+export interface DashboardLayoutProps {
+  role: string;
   navItems: NavItem[];
   activeTab: string;
   setActiveTab: (tab: string) => void;
-  user: { name?: string; email?: string } | null;
+  user: any;
   logout: () => void;
   children: React.ReactNode;
 }
-
 export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   role,
   navItems,
@@ -29,6 +27,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   logout,
   children,
 }) => {
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const canonicalRole =
     role.toUpperCase() === 'RIDER' || role.toUpperCase() === 'CUSTOMER'
       ? 'CUSTOMER'
@@ -36,9 +35,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
       ? 'ADMIN'
       : 'DRIVER';
 
-  return (
-    <div className="min-h-[85vh] flex flex-col md:flex-row gap-6 p-4 md:p-8 max-w-7xl mx-auto w-full">
-      <aside className="w-full md:w-64 shrink-0 rounded-xl border border-brand-border bg-white p-4 flex flex-col justify-between shadow-sm">
+  const NavContent = () => (
+    <div className="flex flex-col h-full justify-between">
         <div className="space-y-6">
           <div className="pb-4 border-b border-brand-border">
             <div className="flex items-center gap-2.5">
@@ -58,7 +56,10 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
               return (
                 <button
                   key={item.id}
-                  onClick={() => item.action ? item.action() : setActiveTab(item.id)}
+                  onClick={() => {
+                    item.action ? item.action() : setActiveTab(item.id);
+                    setIsMobileMenuOpen(false);
+                  }}
                   className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-medium transition-colors ${
                     isActive ? 'bg-brand-secondary text-brand-primary-dark border border-brand-primary/30 font-semibold' : 'text-brand-muted hover:bg-brand-secondary hover:text-brand-text'
                   }`}
@@ -88,11 +89,59 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
             <span>Sign Out</span>
           </button>
         </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen flex flex-col md:flex-row bg-brand-bg">
+        {/* Mobile Header */}
+        <div className="md:hidden flex items-center justify-between p-4 border-b border-brand-border bg-white sticky top-0 z-40">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-primary text-white font-black text-sm">RN</div>
+              <span className="text-lg font-extrabold text-brand-text">RideNova</span>
+            </div>
+            <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 rounded-lg hover:bg-brand-secondary">
+                {isMobileMenuOpen ? <X className="h-6 w-6 text-brand-text" /> : <Menu className="h-6 w-6 text-brand-text" />}
+            </button>
+        </div>
+
+        {/* Mobile Menu Drawer */}
+        {isMobileMenuOpen && (
+            <div className="md:hidden fixed inset-0 z-50 bg-white p-4 pt-20">
+                <NavContent />
+            </div>
+        )}
+
+      {/* Desktop Sidebar */}
+      <aside className="hidden md:block w-64 shrink-0 rounded-xl border border-brand-border bg-white p-4 flex-col justify-between shadow-sm m-4">
+        <NavContent />
       </aside>
 
-      <main className="flex-1 rounded-xl border border-brand-border bg-white p-6 shadow-sm flex flex-col">
+      <main className="flex-1 rounded-xl border-brand-border bg-white p-4 md:p-6 shadow-sm flex flex-col mb-16 md:mb-0">
         {children}
       </main>
+
+      {/* Mobile Bottom Navigation */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-brand-border z-40 flex items-center justify-around p-2 pb-safe">
+        {(
+          navItems.filter(i => ['home', 'services', 'history', 'activity', 'overview', 'requests', 'profile', 'earnings'].includes(i.id)).length > 0
+            ? navItems.filter(i => ['home', 'services', 'history', 'activity', 'overview', 'requests', 'profile', 'earnings'].includes(i.id)).slice(0, 5)
+            : navItems.slice(0, 5)
+        ).map(item => {
+             const Icon = item.icon;
+             const isActive = activeTab === item.id;
+             return (
+               <button
+                 key={item.id}
+                 onClick={() => item.action ? item.action() : setActiveTab(item.id)}
+                 className={`flex flex-col items-center gap-1 p-2 w-full ${isActive ? 'text-brand-primary' : 'text-brand-muted'}`}
+               >
+                 <Icon className="h-5 w-5" />
+                 <span className="text-[10px] font-bold">{item.label}</span>
+               </button>
+             )
+        })}
+      </nav>
     </div>
   );
 };

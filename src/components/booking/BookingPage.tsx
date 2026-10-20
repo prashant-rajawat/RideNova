@@ -25,6 +25,7 @@ import { calculateDistanceKm, estimateDurationMinutes, calculateFare, FARE_CONFI
 import { VehicleType, RideWithStops, RouteSource, PromoCode } from '../../types/index.ts';
 import { api, ApiError } from '../../lib/api.ts';
 import { useAuthSession } from '../../context/AuthContext.tsx';
+import { LiveRideTracker } from './LiveRideTracker.tsx';
 
 interface BookingPageProps {
   onNavigate: (route: string) => void;
@@ -555,90 +556,15 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
       ? calculateFare(selectedRideType, distanceKm, durationMinutes)
       : null;
 
-  // Confirmation Screen View
+  // Confirmation Screen / Live Ride Tracking View
   if (confirmedRide) {
     return (
-      <div className="min-h-[85vh] max-w-4xl mx-auto px-4 py-8">
-        <div className="rounded-xl border border-[#15803D]/30 bg-[#FFFFFF] p-6 sm:p-8 shadow-2xl text-center animate-fade-in">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#15803D]/10 text-[#15803D]">
-            <CheckCircle className="h-8 w-8" />
-          </div>
-
-          <span className="mt-4 inline-flex items-center px-3 py-1 rounded-full text-xs font-mono font-bold bg-[#E21D2B]/10 text-[#E21D2B] border border-[#E21D2B]/30">
-            {confirmedRide.reference_id || `RN-${confirmedRide.id.slice(0, 8).toUpperCase()}`}
-          </span>
-
-          <h1 className="mt-3 text-2xl sm:text-3xl font-extrabold text-[#171717]">
-            Ride Requested Successfully
-          </h1>
-
-          <p className="mt-2 text-xs text-[#737373]">
-            Your ride request has been saved in the PostgreSQL database with status:
-          </p>
-
-          <div className="mt-3 inline-flex items-center gap-2 px-4 py-1.5 rounded-lg border border-[#B45309]/30 bg-[#B45309]/10 text-xs font-semibold text-[#B45309]">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            <span>Status: Searching for a driver... (requested)</span>
-          </div>
-
-          {/* Ride Details Card */}
-          <div className="mt-6 rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] p-5 text-left text-xs space-y-3">
-            <div className="flex items-start justify-between pb-3 border-b border-[#E5E5E5]">
-              <div>
-                <span className="text-[#737373] block text-[11px]">Database Record UUID</span>
-                <span className="font-mono text-[#171717] break-all">{confirmedRide.id}</span>
-              </div>
-              <div className="text-right">
-                <span className="text-[#737373] block text-[11px]">Estimated Fare</span>
-                <span className="font-bold text-[#E21D2B] text-sm">₹{confirmedRide.estimated_fare}</span>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-[#15803D]" />
-                <span className="text-[#737373]">Pickup:</span>
-                <span className="text-[#171717] font-medium">{confirmedRide.pickup_address}</span>
-              </div>
-
-              {confirmedRide.stops?.map((s) => (
-                <div key={s.id} className="flex items-center gap-2 pl-2">
-                  <span className="h-2 w-2 rounded-full bg-[#B45309]" />
-                  <span className="text-[#737373]">Stop {s.stop_order}:</span>
-                  <span className="text-[#171717]">{s.address}</span>
-                </div>
-              ))}
-
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-[#E21D2B]" />
-                <span className="text-[#737373]">Destination:</span>
-                <span className="text-[#171717] font-medium">{confirmedRide.destination_address}</span>
-              </div>
-            </div>
-
-            <div className="pt-3 border-t border-[#E5E5E5] flex flex-wrap items-center justify-between text-[11px] text-[#737373]">
-              <span>Ride Type: <strong className="text-[#171717] uppercase">{confirmedRide.ride_type}</strong></span>
-              <span>Distance: <strong>{confirmedRide.distance_km} km</strong></span>
-              <span>Estimated Duration: <strong>{confirmedRide.estimated_duration_minutes} min</strong></span>
-            </div>
-          </div>
-
-          <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
-            <button
-              onClick={() => onNavigate('rider')}
-              className="w-full sm:w-auto rounded-lg bg-[#E21D2B] px-6 py-2.5 text-xs font-semibold text-[#FFFFFF] hover:bg-[#E21D2B]/90 transition-all shadow-md shadow-[#E21D2B]/20"
-            >
-              Return to Rider Dashboard
-            </button>
-            <button
-              onClick={handleReset}
-              className="w-full sm:w-auto rounded-lg border border-[#E5E5E5] bg-[#FFFFFF] px-6 py-2.5 text-xs font-semibold text-[#171717] hover:border-[#E21D2B]"
-            >
-              Book Another Ride
-            </button>
-          </div>
-        </div>
-      </div>
+      <LiveRideTracker
+        ride={confirmedRide}
+        onNavigate={onNavigate}
+        onReset={handleReset}
+        onRideUpdated={(updated) => setConfirmedRide(updated)}
+      />
     );
   }
 

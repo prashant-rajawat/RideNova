@@ -33,6 +33,8 @@ export const createRideSchema = z.object({
     .min(-180, 'Destination longitude must be between -180 and 180')
     .max(180, 'Destination longitude must be between -180 and 180'),
   rideType: z.enum(['economy', 'comfort', 'premium'] as const),
+  priorityLevel: z.enum(['normal', 'priority', 'high_priority', 'maximum_priority'] as const).optional().default('normal'),
+  incentiveAmount: z.number().min(0).optional().default(0),
   stops: z.array(stopSchema).max(3, 'A maximum of 3 intermediate stops are allowed').optional().default([]),
   scheduledAt: z.string().optional(),
 });

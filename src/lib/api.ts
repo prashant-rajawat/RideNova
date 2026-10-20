@@ -492,6 +492,35 @@ export const api = {
   },
 
   /**
+   * Urgency booster: update driver incentive for requested ride: POST /api/rides/:id/incentive
+   */
+  async boostRideIncentive(
+    rideId: string,
+    incentiveAmount: number,
+    priorityLevel?: string
+  ): Promise<{ success: boolean; message: string; data: RideWithStops }> {
+    return request<{ success: boolean; message: string; data: RideWithStops }>(`/rides/${rideId}/incentive`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ incentiveAmount, priorityLevel }),
+    });
+  },
+
+  /**
+   * Verify passenger trip-start OTP (Driver action): POST /api/driver/rides/:id/verify-otp
+   */
+  async verifyTripOtp(
+    rideId: string,
+    otp: string
+  ): Promise<{ success: boolean; message: string; data: RideWithStops }> {
+    return request<{ success: boolean; message: string; data: RideWithStops }>(`/driver/rides/${rideId}/verify-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ otp }),
+    });
+  },
+
+  /**
    * Process payment for a ride (Stripe test mode / Card): POST /api/rides/:id/pay
    */
   async payRide(
@@ -601,11 +630,37 @@ export const api = {
     minimum_fare?: number;
     maximum_discount?: number;
     usage_limit?: number;
+    starts_at?: string;
+    expires_at?: string;
+    is_active?: boolean;
   }): Promise<{ success: boolean; message: string; data: PromoCode }> {
     return request('/promos', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
+    });
+  },
+
+  /**
+   * Admin: Update Promo: PUT /api/promos/:id
+   */
+  async updatePromo(
+    id: string,
+    data: Partial<PromoCode>
+  ): Promise<{ success: boolean; message: string; data?: PromoCode }> {
+    return request(`/promos/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  },
+
+  /**
+   * Admin: Delete Promo: DELETE /api/promos/:id
+   */
+  async deletePromo(id: string): Promise<{ success: boolean; message: string }> {
+    return request(`/promos/${id}`, {
+      method: 'DELETE',
     });
   },
 

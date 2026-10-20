@@ -129,6 +129,12 @@ export interface Ride {
   ride_type: VehicleType;
   status: RideStatus;
   route_source?: RouteSource | null;
+  expires_at?: string | null;
+  priority_level?: string | null;
+  incentive_amount?: number | null;
+  otp_code?: string | null;
+  otp_verified?: boolean;
+  cancellation_fee?: number | null;
   requested_at: string;
   accepted_at?: string | null;
   started_at?: string | null;
