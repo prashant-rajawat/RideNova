@@ -135,6 +135,7 @@ export interface Ride {
   otp_code?: string | null;
   otp_verified?: boolean;
   cancellation_fee?: number | null;
+  scheduled_at?: string | null;
   requested_at: string;
   accepted_at?: string | null;
   started_at?: string | null;

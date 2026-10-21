@@ -23,6 +23,11 @@ export interface CreateRideDbInput {
   priority_level?: string;
   incentive_amount?: number;
   expires_at?: string;
+  scheduled_at?: string | null;
+  booking_mode?: 'on-demand' | 'scheduled';
+  payment_status?: 'pending' | 'paid' | 'refunded';
+  admin_review_status?: 'pending' | 'approved' | 'rejected';
+  reviewed_at?: string | null;
 }
 
 export interface CreateStopDbInput {
@@ -263,8 +268,12 @@ export const rideRepository = {
             status,
             priority_level,
             incentive_amount,
-            expires_at
-          ) VALUES ($1, NULL, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+            expires_at,
+            scheduled_at,
+            booking_mode,
+            payment_status,
+            admin_review_status
+          ) VALUES ($1, NULL, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
           RETURNING *`,
           [
             rideInput.rider_id,
@@ -282,6 +291,10 @@ export const rideRepository = {
             priorityLevel,
             incentiveAmount,
             expiresAt,
+            rideInput.scheduled_at || null,
+            rideInput.booking_mode || 'on-demand',
+            rideInput.payment_status || 'pending',
+            rideInput.admin_review_status || 'pending',
           ]
         );
 
@@ -350,6 +363,7 @@ export const rideRepository = {
       priority_level: rideInput.priority_level || 'normal',
       incentive_amount: rideInput.incentive_amount || 0,
       expires_at: rideInput.expires_at || new Date(Date.now() + 5 * 60000).toISOString(),
+      scheduled_at: rideInput.scheduled_at || null,
       requested_at: now,
       accepted_at: null,
       started_at: null,
@@ -639,6 +653,69 @@ export const rideRepository = {
   },
 
   /**
+   * Find active on-demand ride for a driver (excluding future scheduled rides)
+   */
+  async findActiveOnDemandRideForDriver(driverId: string): Promise<RideWithStops | null> {
+    const immediateStatuses: RideStatus[] = ['driver_arriving', 'driver_arrived', 'ride_started'];
+
+    if (isDatabaseConfigured()) {
+      try {
+        const res = await query<Ride>(
+          `SELECT * FROM rides 
+           WHERE driver_id = $1 
+             AND (
+               status IN ('driver_arriving', 'driver_arrived', 'ride_started')
+               OR (status = 'accepted' AND (scheduled_at IS NULL OR scheduled_at <= NOW()))
+             )
+           ORDER BY updated_at DESC LIMIT 1`,
+          [driverId]
+        );
+
+        if (res.rows.length === 0) return null;
+
+        const ride = res.rows[0];
+        const stopsRes = await query<RideStop>(
+          `SELECT * FROM ride_stops WHERE ride_id = $1 ORDER BY stop_order ASC`,
+          [ride.id]
+        );
+
+        const enriched = await enrichRideWithDriver(ride, stopsRes.rows);
+        return {
+          ...enriched,
+          otp_code: undefined,
+        };
+      } catch (error) {
+        logger.error('Error finding active on-demand ride for driver', {
+          error: (error as Error).message,
+          driverId,
+        });
+        throw error;
+      }
+    }
+
+    const now = Date.now();
+    for (const ride of memoryRides.values()) {
+      if (ride.driver_id === driverId) {
+        if (immediateStatuses.includes(ride.status)) {
+          const stops = memoryRideStops.get(ride.id) || [];
+          const enriched = await enrichRideWithDriver(ride, stops);
+          return { ...enriched, otp_code: undefined };
+        }
+        if (ride.status === 'accepted') {
+          const isFuture = Boolean(ride.scheduled_at && new Date(ride.scheduled_at).getTime() > now);
+          if (!isFuture) {
+            const stops = memoryRideStops.get(ride.id) || [];
+            const enriched = await enrichRideWithDriver(ride, stops);
+            return { ...enriched, otp_code: undefined };
+          }
+        }
+      }
+    }
+
+    return null;
+  },
+
+  /**
    * Update ride status by assigned driver
    */
   async updateRideStatus(
@@ -655,6 +732,15 @@ export const rideRepository = {
         const params: unknown[] = [newStatus, rideId, driverId];
 
         if (newStatus === 'ride_started') {
+          const checkRes = await query<Ride>(
+            `SELECT otp_verified FROM rides WHERE id = $1 AND driver_id = $2`,
+            [rideId, driverId]
+          );
+          if (checkRes.rows.length === 0 || !checkRes.rows[0].otp_verified) {
+            throw new Error(
+              'Starting a trip requires mandatory passenger OTP verification. Please verify the 4-digit code provided by the passenger via the verify-otp endpoint.'
+            );
+          }
           setQuery += `, started_at = NOW()`;
         } else if (newStatus === 'ride_completed') {
           setQuery += `, completed_at = NOW()`;
@@ -690,6 +776,12 @@ export const rideRepository = {
 
     const ride = memoryRides.get(rideId);
     if (!ride || ride.driver_id !== driverId) return null;
+
+    if (newStatus === 'ride_started' && !ride.otp_verified) {
+      throw new Error(
+        'Starting a trip requires mandatory passenger OTP verification. Please verify the 4-digit code provided by the passenger via the verify-otp endpoint.'
+      );
+    }
 
     ride.status = newStatus;
     ride.updated_at = now;

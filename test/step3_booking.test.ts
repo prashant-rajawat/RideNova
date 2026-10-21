@@ -128,12 +128,12 @@ async function runStep3Tests() {
     // -------------------------------------------------------------
     console.log('\n--- Route Booking Authorization & Validation ---');
     const validBookingPayload = {
-      pickupAddress: 'KPGU, Gandhinagar',
-      pickupLatitude: 23.2156,
-      pickupLongitude: 72.6369,
-      destinationAddress: 'Ahmedabad Railway Station',
-      destinationLatitude: 23.0225,
-      destinationLongitude: 72.5714,
+      pickupAddress: 'Vadodara Central, Vadodara',
+      pickupLatitude: 22.3072,
+      pickupLongitude: 73.1812,
+      destinationAddress: 'Sayaji Baug, Vadodara',
+      destinationLatitude: 22.3150,
+      destinationLongitude: 73.1900,
       rideType: 'comfort',
       stops: [],
     };
@@ -279,7 +279,7 @@ async function runStep3Tests() {
     const validThreeStopsPayload = {
       ...validBookingPayload,
       stops: [
-        { address: 'City Mall, Gandhinagar', latitude: 23.1989, longitude: 72.6289, stopOrder: 1 },
+        { address: 'City Mall, Gandhinagar', latitude: 22.3050, longitude: 73.1750, stopOrder: 1 },
         { address: 'Sabarmati Ashram', latitude: 23.0605, longitude: 72.5806, stopOrder: 2 },
         { address: 'Ahmedabad Airport', latitude: 23.0772, longitude: 72.6347, stopOrder: 3 },
       ],
@@ -359,8 +359,8 @@ async function runStep3Tests() {
         pickupLatitude: 22.2575,
         pickupLongitude: 73.1812,
         destinationAddress: 'Ahmedabad Railway Station, Kalupur',
-        destinationLatitude: 23.0225,
-        destinationLongitude: 72.5714,
+        destinationLatitude: 22.3200,
+        destinationLongitude: 73.1950,
         rideType: 'economy',
         stops: [],
       },
@@ -382,11 +382,11 @@ async function runStep3Tests() {
         pickupLatitude: 22.2575,
         pickupLongitude: 73.1812,
         destinationAddress: 'Ahmedabad Railway Station, Kalupur',
-        destinationLatitude: 23.0225,
-        destinationLongitude: 72.5714,
+        destinationLatitude: 22.3200,
+        destinationLongitude: 73.1950,
         rideType: 'comfort',
         stops: [
-          { address: 'City Mall, Gandhinagar', latitude: 23.1989, longitude: 72.6289, stopOrder: 1 },
+          { address: 'City Mall, Gandhinagar', latitude: 22.3050, longitude: 73.1750, stopOrder: 1 },
         ],
       },
     });
@@ -406,12 +406,12 @@ async function runStep3Tests() {
         pickupLatitude: 22.2575,
         pickupLongitude: 73.1812,
         destinationAddress: 'Ahmedabad Railway Station, Kalupur',
-        destinationLatitude: 23.0225,
-        destinationLongitude: 72.5714,
+        destinationLatitude: 22.3200,
+        destinationLongitude: 73.1950,
         rideType: 'premium',
         stops: [
-          { address: 'City Mall, Gandhinagar', latitude: 23.1989, longitude: 72.6289, stopOrder: 1 },
-          { address: 'Infocity, Gandhinagar', latitude: 23.1895, longitude: 72.6281, stopOrder: 2 },
+          { address: 'City Mall, Vadodara', latitude: 22.3050, longitude: 73.1750, stopOrder: 1 },
+          { address: 'Infocity, Vadodara', latitude: 22.3100, longitude: 73.1850, stopOrder: 2 },
         ],
       },
     });
@@ -475,12 +475,12 @@ async function runStep3Tests() {
       pickupLatitude: 22.2575,
       pickupLongitude: 73.1812,
       destinationAddress: 'Ahmedabad Railway Station, Kalupur',
-      destinationLatitude: 23.0225,
-      destinationLongitude: 72.5714,
+      destinationLatitude: 22.3200,
+      destinationLongitude: 73.1950,
       rideType: 'economy',
       stops: [
-        { address: 'City Mall, Gandhinagar', latitude: 23.1989, longitude: 72.6289, stopOrder: 1 },
-        { address: 'City Mall, Gandhinagar', latitude: 23.1989, longitude: 72.6289, stopOrder: 2 }, // Duplicate Stop 1
+        { address: 'City Mall, Gandhinagar', latitude: 22.3050, longitude: 73.1750, stopOrder: 1 },
+        { address: 'City Mall, Gandhinagar', latitude: 22.3050, longitude: 73.1750, stopOrder: 2 }, // Duplicate Stop 1
       ],
     };
 
@@ -498,7 +498,7 @@ async function runStep3Tests() {
     // Test distinct addresses
     const distinctStopsPayload = {
       stops: [
-        { address: 'City Mall, Gandhinagar', latitude: 23.1989, longitude: 72.6289, stopOrder: 1 },
+        { address: 'City Mall, Gandhinagar', latitude: 22.3050, longitude: 73.1750, stopOrder: 1 },
         { address: 'Infocity, Gandhinagar', latitude: 23.1895, longitude: 72.6281, stopOrder: 2 },
       ],
     };

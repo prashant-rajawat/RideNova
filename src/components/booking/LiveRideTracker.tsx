@@ -11,10 +11,12 @@ import {
   Phone,
   X,
   Sparkles,
+  Eye,
 } from 'lucide-react';
 import { RideWithStops } from '../../types/index.ts';
 import { api } from '../../lib/api.ts';
 import { useRideSubscription } from '../../hooks/useRideSubscription.ts';
+import { TripDetailsModal } from './TripDetailsModal.tsx';
 
 interface LiveRideTrackerProps {
   ride: RideWithStops;
@@ -34,6 +36,7 @@ export const LiveRideTracker: React.FC<LiveRideTrackerProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showDriverPopup, setShowDriverPopup] = useState(false);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [timeLeft, setTimeLeft] = useState<number>(300); // 5 minutes in seconds
 
   // Fetch latest authoritative ride state
@@ -384,29 +387,37 @@ export const LiveRideTracker: React.FC<LiveRideTrackerProps> = ({
 
         {/* Action Buttons */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
-          {isSearching && (
+          {(isSearching || isAccepted) && (
             <button
               type="button"
               disabled={loadingAction}
               onClick={() => setShowCancelModal(true)}
-              className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-[#B91C1C] text-white text-xs font-bold hover:bg-[#991B1B] transition-colors shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
+              className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-[#B91C1C] text-white text-xs font-bold hover:bg-[#991B1B] transition-colors shadow-sm flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
             >
-              <span>Cancel Ride Request</span>
+              <span>{isSearching ? 'Cancel Ride Request' : 'Cancel Ride'}</span>
             </button>
           )}
 
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+            <button
+              type="button"
+              onClick={() => setIsDetailsModalOpen(true)}
+              className="w-full sm:w-auto px-5 py-2.5 rounded-xl border border-[#E21D2B]/30 bg-[#FFF1F2] text-[#E21D2B] text-xs font-bold hover:bg-[#E21D2B] hover:text-white transition-colors shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <Eye className="h-3.5 w-3.5" />
+              <span>View Full Trip Details</span>
+            </button>
             <button
               type="button"
               onClick={() => onNavigate('rider')}
-              className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-[#E21D2B] text-white text-xs font-bold hover:bg-[#BE1622] transition-colors shadow-sm cursor-pointer"
+              className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-[#E21D2B] text-white text-xs font-bold hover:bg-[#BE1622] transition-colors shadow-sm cursor-pointer"
             >
               Return to Dashboard
             </button>
             <button
               type="button"
               onClick={onReset}
-              className="w-full sm:w-auto px-6 py-2.5 rounded-xl border border-[#E5E5E5] bg-white text-xs font-bold text-[#171717] hover:border-[#E21D2B] cursor-pointer"
+              className="w-full sm:w-auto px-5 py-2.5 rounded-xl border border-[#E5E5E5] bg-white text-xs font-bold text-[#171717] hover:border-[#E21D2B] cursor-pointer"
             >
               Book Another Ride
             </button>
@@ -489,6 +500,15 @@ export const LiveRideTracker: React.FC<LiveRideTrackerProps> = ({
             </div>
           </div>
         )}
+
+        {/* Trip Details Modal */}
+        <TripDetailsModal
+          isOpen={isDetailsModalOpen}
+          onClose={() => setIsDetailsModalOpen(false)}
+          rideId={currentRide.id}
+          onNavigate={onNavigate}
+          onCancelRide={() => setShowCancelModal(true)}
+        />
       </div>
     </div>
   );

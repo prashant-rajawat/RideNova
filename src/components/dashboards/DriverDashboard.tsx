@@ -87,6 +87,11 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({ onNavigate }) 
   const [showDriverCancelModal, setShowDriverCancelModal] = useState(false);
   const [driverCancelReason, setDriverCancelReason] = useState('Vehicle breakdown / mechanical issue');
 
+  // Passenger OTP verification states
+  const [driverOtpInput, setDriverOtpInput] = useState<string>('');
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState<boolean>(false);
+  const [otpVerifyError, setOtpVerifyError] = useState<string | null>(null);
+
   // KYC Modal state
   const [isKycModalOpen, setIsKycModalOpen] = useState<boolean>(false);
   const [kycStep, setKycStep] = useState<number>(1);
@@ -275,8 +280,13 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({ onNavigate }) 
       const nextOnline = !profile.isOnline;
 
       if (!nextOnline) {
+        const isFutureScheduled = Boolean(
+          activeRide?.scheduled_at &&
+          new Date(activeRide.scheduled_at).getTime() > Date.now() &&
+          activeRide.status === 'accepted'
+        );
         const onDemandStatuses = ['accepted', 'driver_arriving', 'driver_arrived', 'ride_started'];
-        if (activeRide && onDemandStatuses.includes(activeRide.status)) {
+        if (activeRide && onDemandStatuses.includes(activeRide.status) && !isFutureScheduled) {
           showError('Cannot switch to offline while you have an active on-demand trip in progress. Please complete or cancel this trip first.');
           setActionLoading(false);
           return;
@@ -307,9 +317,16 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({ onNavigate }) 
 
       if (res.success) {
         setProfile({ ...profile, isOnline: nextOnline, currentLatitude: lat, currentLongitude: lng });
+        const hasFutureScheduled = Boolean(
+          activeRide?.scheduled_at &&
+          new Date(activeRide.scheduled_at).getTime() > Date.now() &&
+          activeRide.status === 'accepted'
+        );
         showSuccess(
           nextOnline
             ? 'You are now ONLINE. Searching for nearby passenger requests...'
+            : hasFutureScheduled
+            ? 'You are now OFFLINE. Note: You remain assigned to your future scheduled bookings.'
             : 'You are now OFFLINE. New trip assignments paused.'
         );
         if (nextOnline) loadRequests();
@@ -398,6 +415,39 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({ onNavigate }) 
       showError(err.message || 'Failed to advance trip lifecycle.');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  // Verify Passenger OTP to atomically start trip
+  const handleVerifyOtpAndStartTrip = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!activeRide) return;
+
+    if (!driverOtpInput || driverOtpInput.trim().length !== 4) {
+      setOtpVerifyError('Please enter a valid 4-digit verification code.');
+      return;
+    }
+
+    setIsVerifyingOtp(true);
+    setOtpVerifyError(null);
+    clearMessages();
+
+    try {
+      const res = await api.verifyTripOtp(activeRide.id, driverOtpInput.trim());
+      if (res.success && res.data) {
+        setActiveRide(res.data);
+        setDriverOtpInput('');
+        showSuccess('Passenger OTP verified successfully! Trip has started.');
+        loadDriverData();
+      } else {
+        setOtpVerifyError(res.message || 'Incorrect OTP. Please ask the passenger to confirm the code.');
+      }
+    } catch (err: any) {
+      const msg = err.message || 'Incorrect OTP. Please ask the passenger to confirm the code.';
+      setOtpVerifyError(msg);
+      showError(msg);
+    } finally {
+      setIsVerifyingOtp(false);
     }
   };
 
@@ -1246,16 +1296,71 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({ onNavigate }) 
                       </button>
                     )}
 
+                    {/* Mandatory Passenger OTP Verification Before Starting Trip */}
                     {activeRide.status === 'driver_arrived' && (
-                      <button
-                        type="button"
-                        onClick={() => handleUpdateRideStatus('ride_started')}
-                        disabled={actionLoading}
-                        className="w-full rounded-xl bg-[#15803D] py-3 text-xs font-bold text-white hover:bg-[#15803D]/90 transition-all shadow-md cursor-pointer flex items-center justify-center gap-2"
-                      >
-                        <CheckCircle2 className="h-4 w-4" />
-                        <span>Passenger Onboard · Start Trip</span>
-                      </button>
+                      <div className="space-y-3.5 rounded-2xl border-2 border-[#E21D2B]/30 bg-[#FFF1F2]/60 p-4 sm:p-5 shadow-sm animate-fade-in">
+                        <div className="flex items-center gap-2.5">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#E21D2B] text-white shadow-xs shrink-0">
+                            <ShieldCheck className="h-4 w-4" />
+                          </div>
+                          <div>
+                            <h4 className="text-xs font-bold uppercase tracking-wider text-[#171717]">
+                              Verify Passenger OTP
+                            </h4>
+                            <p className="text-[11px] text-[#737373]">
+                              Passenger communicates the 4-digit code from their View Trip Details screen.
+                            </p>
+                          </div>
+                        </div>
+
+                        <form onSubmit={handleVerifyOtpAndStartTrip} className="space-y-3">
+                          <div>
+                            <label className="text-xs font-bold text-[#171717] block mb-1">
+                              Enter 4-Digit Passenger Code
+                            </label>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              maxLength={4}
+                              value={driverOtpInput}
+                              onChange={(e) => {
+                                const val = e.target.value.replace(/\D/g, '').slice(0, 4);
+                                setDriverOtpInput(val);
+                                setOtpVerifyError(null);
+                              }}
+                              placeholder="• • • •"
+                              disabled={isVerifyingOtp}
+                              className="w-full text-center font-mono text-2xl tracking-[0.5em] font-black rounded-xl border border-[#E5E5E5] bg-white py-3 text-[#171717] placeholder:text-[#A3A3A3] placeholder:tracking-normal placeholder:font-sans placeholder:text-sm focus:border-[#E21D2B] focus:ring-2 focus:ring-[#E21D2B]/20 outline-none shadow-2xs"
+                              autoFocus
+                            />
+                            {otpVerifyError && (
+                              <p className="mt-1.5 text-xs font-semibold text-[#B91C1C] flex items-center gap-1.5 animate-shake">
+                                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                                <span>{otpVerifyError}</span>
+                              </p>
+                            )}
+                          </div>
+
+                          <button
+                            type="submit"
+                            disabled={isVerifyingOtp || driverOtpInput.trim().length !== 4}
+                            className="w-full rounded-xl bg-[#15803D] py-3.5 text-xs font-bold text-white hover:bg-[#15803D]/90 transition-all shadow-md cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {isVerifyingOtp ? (
+                              <>
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                <span>Verifying OTP & Starting Trip...</span>
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle2 className="h-4 w-4" />
+                                <span>Verify OTP & Start Trip</span>
+                              </>
+                            )}
+                          </button>
+                        </form>
+                      </div>
                     )}
 
                     {activeRide.status === 'ride_started' && (

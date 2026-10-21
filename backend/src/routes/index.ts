@@ -9,8 +9,12 @@ import promoRoutes from './promo.routes.ts';
 import notificationRoutes from './notification.routes.ts';
 import paymentRoutes from './payment.routes.ts';
 import profileRoutes from './profile.routes.ts';
+import parcelRoutes from './parcel.routes.ts';
 
 const apiRouter = Router();
+
+// Mount parcel routes under /api/parcels
+apiRouter.use('/parcels', parcelRoutes);
 
 // Mount health routes under /api/health
 apiRouter.use('/health', healthRoutes);

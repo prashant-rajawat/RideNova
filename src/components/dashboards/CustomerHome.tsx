@@ -17,6 +17,7 @@ import {
   AlertCircle,
   Loader2,
   Tag,
+  Eye,
 } from 'lucide-react';
 import { RideWithStops } from '../../types/index.ts';
 import { useAuthSession } from '../../context/AuthContext.tsx';
@@ -26,6 +27,7 @@ interface CustomerHomeProps {
   activeRide?: RideWithStops;
   onCancelRide: (rideId: string) => void;
   actionLoading: boolean;
+  onViewTripDetails?: (rideId: string) => void;
 }
 
 interface ServiceItem {
@@ -59,8 +61,7 @@ const SERVICES: ServiceItem[] = [
     subtitle: 'Express delivery',
     imageUrl: 'https://i.ibb.co/xt4N99wT/Screenshot-2026-10-20-175337.png',
     fallbackImageUrl: '/assets/services/package.png',
-    badge: 'Soon',
-    isAvailable: false,
+    isAvailable: true,
     tagline: 'Door-to-Door Courier Delivery',
     description: 'Send and receive parcels, care packages, keys, or business documents across town.',
     features: ['Same-day courier dispatch', 'Live package tracking with PIN', 'Photo drop-off confirmation'],
@@ -155,13 +156,16 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({
   activeRide,
   onCancelRide,
   actionLoading,
+  onViewTripDetails,
 }) => {
   const { user } = useAuthSession();
   const [selectedService, setSelectedService] = useState<ServiceItem | null>(null);
   const [notifiedServices, setNotifiedServices] = useState<Record<string, boolean>>({});
 
   const handleServiceClick = (item: ServiceItem) => {
-    if (item.isAvailable) {
+    if (item.id === 'package') {
+      onNavigate('book-parcel');
+    } else if (item.isAvailable) {
       onNavigate('book-ride');
     } else {
       setSelectedService(item);
@@ -206,13 +210,40 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({
             <div className="flex items-center gap-2">
               <span className="h-2.5 w-2.5 rounded-full bg-[#E21D2B] animate-ping" />
               <span className="text-xs font-black uppercase text-[#E21D2B] tracking-wider">
-                Active Ride In Progress
+                Active Ride · {activeRide.status.replace('_', ' ')}
               </span>
             </div>
             <span className="font-mono text-xs font-bold text-[#171717]">
               {activeRide.reference_id || activeRide.id.slice(0, 8)}
             </span>
           </div>
+
+          {/* Assigned Driver & OTP Micro-Snapshot */}
+          {activeRide.driver && (
+            <div className="p-2.5 bg-white rounded-xl border border-[#E21D2B]/20 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2">
+                <div className="h-7 w-7 rounded-full bg-[#E21D2B]/10 text-[#E21D2B] font-bold text-xs flex items-center justify-center shrink-0">
+                  {activeRide.driver.name.charAt(0)}
+                </div>
+                <div>
+                  <p className="font-bold text-[#171717] leading-tight">{activeRide.driver.name}</p>
+                  <p className="text-[11px] text-[#737373]">
+                    {activeRide.driver.vehicle
+                      ? `${activeRide.driver.vehicle.make} ${activeRide.driver.vehicle.model} · ${activeRide.driver.vehicle.registration_number}`
+                      : 'Verified Driver Partner'}
+                  </p>
+                </div>
+              </div>
+              {activeRide.otp_code && !activeRide.otp_verified && (
+                <div className="text-right">
+                  <span className="text-[9px] uppercase font-bold text-[#737373] block">Passenger OTP</span>
+                  <span className="font-mono text-xs font-extrabold text-[#E21D2B] px-1.5 py-0.5 rounded bg-[#FFF1F2] border border-[#E21D2B]/30">
+                    {activeRide.otp_code}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="space-y-1.5 bg-white p-3 rounded-xl border border-[#E5E5E5]">
             <div className="flex items-start gap-2">
@@ -229,22 +260,34 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-1">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-1">
             <div>
               <span className="text-[10px] text-[#737373] uppercase font-bold">Fare</span>
               <p className="text-sm font-black text-[#171717]">₹{activeRide.estimated_fare}</p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
+                type="button"
+                onClick={() =>
+                  onViewTripDetails ? onViewTripDetails(activeRide.id) : onNavigate('book-ride')
+                }
+                className="px-3.5 py-1.5 rounded-xl bg-[#E21D2B] text-white text-xs font-bold hover:bg-[#BE1622] transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+              >
+                <Eye className="h-3.5 w-3.5" />
+                <span>View Trip Details</span>
+              </button>
+              <button
+                type="button"
                 onClick={() => onNavigate('book-ride')}
-                className="px-3 py-1.5 rounded-lg bg-white border border-[#E5E5E5] text-xs font-semibold text-[#171717] hover:bg-[#FAFAFA]"
+                className="px-3 py-1.5 rounded-xl bg-white border border-[#E5E5E5] text-xs font-semibold text-[#171717] hover:bg-[#FAFAFA] cursor-pointer"
               >
                 View Map
               </button>
               <button
+                type="button"
                 onClick={() => onCancelRide(activeRide.id)}
                 disabled={actionLoading}
-                className="px-3 py-1.5 rounded-lg bg-[#B91C1C] text-white text-xs font-bold hover:bg-[#991B1B] transition-colors flex items-center gap-1"
+                className="px-3 py-1.5 rounded-xl bg-[#B91C1C] text-white text-xs font-bold hover:bg-[#991B1B] transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
               >
                 {actionLoading && <Loader2 className="h-3 w-3 animate-spin" />}
                 <span>Cancel</span>

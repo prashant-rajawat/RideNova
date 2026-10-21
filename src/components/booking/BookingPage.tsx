@@ -23,6 +23,7 @@ import {
 import { GoogleMapWrapper, LocationPoint, StopPoint } from '../maps/GoogleMapWrapper.tsx';
 import { calculateDistanceKm, estimateDurationMinutes, calculateFare, FARE_CONFIG } from '../../lib/fare.ts';
 import { VehicleType, RideWithStops, RouteSource, PromoCode } from '../../types/index.ts';
+import { isWithinServiceArea } from '../../utils/serviceArea.ts';
 import { api, ApiError } from '../../lib/api.ts';
 import { useAuthSession } from '../../context/AuthContext.tsx';
 import { LiveRideTracker } from './LiveRideTracker.tsx';
@@ -132,6 +133,20 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
   const [promoMessage, setPromoMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isValidatingPromo, setIsValidatingPromo] = useState<boolean>(false);
   const [availablePromos, setAvailablePromos] = useState<PromoCode[]>([]);
+
+  // Check if rider already has an active ride (restore on refresh or navigation)
+  useEffect(() => {
+    api.getRides().then((res) => {
+      if (res.data && res.data.length > 0) {
+        const active = res.data.find((r) =>
+          ['requested', 'accepted', 'driver_arriving', 'driver_arrived', 'ride_started'].includes(r.status)
+        );
+        if (active) {
+          setConfirmedRide(active);
+        }
+      }
+    }).catch(() => {});
+  }, []);
 
   // Suggestions Dropdowns & Predictions
   const [activeSuggestionField, setActiveSuggestionField] = useState<'pickup' | 'dest' | number | null>(null);
@@ -384,6 +399,13 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
         if (place.location) {
           const lat = Number(place.location.lat().toFixed(4));
           const lng = Number(place.location.lng().toFixed(4));
+          
+          if (!isWithinServiceArea(lat, lng)) {
+            setBookingError('Sorry, this location is outside our current service area (Vadodara 50km radius).');
+            setGooglePredictions([]);
+            return;
+          }
+          
           const addr = place.formattedAddress || place.displayName || placePrediction.text?.text || 'Selected Place';
           handleSelectSuggestion(field, {
             address: addr,
@@ -488,9 +510,23 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
     setPromoMessage(null);
   };
 
+
   // Confirm and create ride request
   const handleConfirmRide = async () => {
     if (!pickup || !destination || isSubmitting) return;
+
+    // Validate Service Area
+    const locations = [
+      { lat: pickup.latitude, lng: pickup.longitude, label: 'pickup location' },
+      { lat: destination.latitude, lng: destination.longitude, label: 'destination' },
+      ...stops.map((s) => ({ lat: s.latitude, lng: s.longitude, label: `stop ${s.stopOrder}` })),
+    ];
+    for (const loc of locations) {
+      if (!isWithinServiceArea(loc.lat, loc.lng)) {
+        setBookingError(`Sorry, the ${loc.label} is outside our current service area (Vadodara 50km radius).`);
+        return;
+      }
+    }
 
     setIsSubmitting(true);
     setBookingError(null);

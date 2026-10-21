@@ -1,0 +1,1228 @@
+# RIDENOVA DOOR-TO-DOOR PARCEL DELIVERY
+## Complete Production-Ready Feature Implementation Master Prompt
+
+You are working on my existing RideNova ride-booking platform. Implement a complete, end-to-end Door-to-Door Parcel Delivery service inside the existing application.
+
+This is a real implementation task, not a UI mockup, planning exercise, or code-audit-only task.
+
+I want a complete working feature covering the customer frontend, driver frontend, admin dashboard, backend APIs, database persistence, photo uploads, separate pickup and delivery OTP verification, payment processing, real-time tracking, notifications, cancellation workflows, evidence management, and automated tests.
+
+Do not simply describe the changes. Inspect the existing repository, modify the actual files, run the application checks, and verify the implemented workflows.
+
+Do not claim a feature is complete merely because the code compiles or a button is visible.
+
+---
+
+# SECTION 1 — FIRST INSPECT THE EXISTING APPLICATION
+
+Before modifying anything, inspect the actual repository and identify:
+
+1. The frontend framework, routing, component structure, styling system, and authentication integration.
+2. The backend framework, controllers, services, repositories, API routes, and middleware.
+3. The existing PostgreSQL/Supabase database connection and migration runner.
+4. The existing Clerk authentication and customer/driver/admin role model.
+5. The existing Google Maps integration and route-distance calculation.
+6. The current real-time subscription infrastructure.
+7. The existing notification system.
+8. The current Stripe/payment implementation, if present.
+9. Existing photo/file storage integrations, if any.
+10. The current passenger ride lifecycle, driver approval system, and payment ledger.
+11. Existing test commands, test suites, build commands, and deployment configuration.
+12. Existing reusable UI components and the white-red-black RideNova theme.
+
+The existing project uses a Vite + React + TypeScript + Tailwind frontend and a Node.js + Express + TypeScript backend, with PostgreSQL/Supabase and Clerk authentication. Google Maps and Stripe-related infrastructure may already exist.
+
+Verify these details against the actual repository rather than assuming every component is already functional.
+
+Reuse existing infrastructure where appropriate. Do not introduce duplicate authentication, payment, map, notification, or database systems without a clear technical reason.
+
+Do not replace the existing application with a new project or remove unrelated working features.
+
+## Mandatory implementation rule
+
+Implement the complete feature in the actual codebase.
+
+Do not stop after:
+- Writing a plan.
+- Generating example components.
+- Adding database columns without connecting the frontend.
+- Adding backend routes without calling them from the frontend.
+- Creating buttons that do not perform real actions.
+- Building a static demonstration.
+- Returning mocked data instead of database records.
+- Writing tests without executing them.
+- Claiming migrations ran when they were not executed.
+
+If a required external service or secret is unavailable, implement the real integration structure, explain exactly which configuration is missing, and never fake successful transactions or uploads.
+
+---
+
+# SECTION 2 — SERVICE DEFINITION AND BUSINESS RULES
+
+Create a dedicated service called:
+
+**RideNova Parcel — Door-to-Door Delivery**
+
+Tagline: “Pick Up. Track. Deliver. Verify.”
+
+The service allows a customer to send a permitted parcel from one address to another.
+
+The core process is:
+
+1. Customer enters parcel details.
+2. Customer uploads parcel photographs.
+3. Customer enters pickup and recipient addresses.
+4. Backend calculates the delivery fare.
+5. Customer chooses online prepaid or cash at pickup.
+6. The request is saved to the database.
+7. Eligible drivers receive the delivery request.
+8. One eligible driver accepts the request.
+9. Driver travels to the pickup location.
+10. Sender provides a pickup OTP.
+11. Driver verifies the pickup OTP and captures pickup evidence.
+12. The parcel is recorded as collected.
+13. Driver starts the delivery journey.
+14. Customer can track the delivery and view persistent details.
+15. Driver reaches the destination.
+16. Recipient provides a separate delivery OTP.
+17. Driver captures delivery evidence.
+18. Backend verifies all required completion conditions.
+19. Delivery is marked delivered.
+20. Customer receives a receipt and can access the completed delivery history.
+21. Driver earnings and payment records are updated correctly.
+
+The feature must support these two initial payment methods:
+
+A. ONLINE PREPAID
+- Customer pays before the parcel is dispatched.
+- Dispatch must not proceed as a prepaid job until payment is authoritatively confirmed by the payment provider and backend.
+
+B. CASH AT PICKUP
+- The driver collects the configured delivery fee from the sender at pickup.
+- The driver must record the collection.
+- The sender must receive an acknowledgement.
+- The parcel cannot proceed until the cash-collection requirements are satisfied.
+- Do not also charge the same delivery fee online.
+
+Do not implement cash on delivery in this first release. Keep the architecture extensible so it can be added later.
+
+Use separate pickup and delivery OTPs.
+
+Pickup OTP confirms authorised handover by the sender. Delivery OTP confirms handover to the intended recipient.
+
+Do not reuse passenger-ride OTPs or passenger-ride status transitions in a way that breaks the existing ride system.
+
+---
+
+# SECTION 3 — UI/UX AND BRANDING
+
+Follow the existing RideNova design language:
+
+- White: #FFFFFF
+- Primary red: #E21D2B
+- Dark red: #BE1622
+- Main text: #171717
+- Secondary text: #737373
+- Borders: #E5E5E5
+- Soft red: #FFF1F2
+- Green only for successful or verified states.
+
+Use responsive layouts for mobile, tablet, and desktop.
+
+The UI must look like a polished commercial delivery application, not a basic administrative form.
+
+Use consistent typography, spacing, icons, cards, progress indicators, clear status badges, helpful validation messages, skeleton loading states, empty states, confirmation dialogs, and accessible controls.
+
+Use the existing UI component library and design conventions wherever possible.
+
+Do not redesign unrelated passenger ride screens unnecessarily.
+
+Every button must have a real action. Every displayed status must reflect actual backend data. Do not add fake parcel requests, fake driver locations, fake payments, fake evidence, or fake earnings.
+
+## Customer-facing entry point
+
+Replace the current placeholder Door-to-Door Courier Delivery experience with a real navigation flow.
+
+The existing promotional card should open the new parcel-booking experience.
+
+Do not leave the user trapped in a popup that only says “Notify Me When Launched” or “Book a Ride Instead.”
+
+If the service is not yet operational because a required configuration is missing, show an honest availability message while keeping the implemented flow testable in an authorised test environment.
+
+## Customer navigation
+
+Add or reuse a dedicated Parcel Deliveries entry in the customer dashboard.
+
+The customer must be able to access:
+- Create Parcel Delivery.
+- Active Parcel Delivery.
+- Delivery Details.
+- Parcel Delivery History.
+- Payment and Receipt.
+- Help and Support.
+
+Do not hide the active delivery behind a temporary notification.
+
+---
+
+# SECTION 4 — CUSTOMER BOOKING WIZARD
+
+Create a multi-step booking wizard with a clear progress indicator.
+
+Suggested steps:
+
+1. Parcel Details
+2. Pickup Address
+3. Recipient and Destination
+4. Fare and Payment
+5. Review and Confirm
+
+Allow users to move backward to correct details without unnecessarily losing entered information.
+
+Validate fields at the appropriate step and again on the backend.
+
+Prevent duplicate booking submissions.
+
+## Step 1: Parcel Details
+
+Collect:
+
+- Parcel category.
+- Number of packages.
+- Package size: Small, Medium, Large.
+- Approximate weight in kilograms.
+- Fragile status.
+- Special handling requirements supported by the service.
+- Sender's description or delivery instructions.
+- One or more parcel photographs.
+
+Support common permitted categories such as documents, clothing, books, gifts, and other approved parcels.
+
+Clearly display the prohibited-items policy. Do not encourage or accept illegal, dangerous, or restricted goods.
+
+Do not claim that a photo proves the contents or exact weight of a sealed parcel.
+
+## Parcel photo upload requirements
+
+The interface must support:
+- Camera capture where available.
+- File selection.
+- Image preview.
+- Remove and retake actions.
+- Upload progress.
+- File type and size validation.
+- Clear errors and safe retry.
+- Persistent storage of successfully uploaded images.
+
+Use the project's existing secure object-storage integration if available. If none exists, implement an appropriate private object-storage integration using the existing infrastructure and document the required configuration.
+
+Do not store sensitive parcel photos as publicly accessible files.
+
+Do not mark an upload successful until storage confirms it.
+
+## Step 2: Pickup Address
+
+Collect:
+- Pickup address.
+- Map location.
+- House, apartment, office, or building.
+- Landmark.
+- Floor or gate instructions where applicable.
+- Sender name.
+- Sender mobile number.
+- Pickup instructions.
+
+Integrate with the existing Google Maps Places/autocomplete implementation where available.
+
+Allow manual address entry if location permission is unavailable.
+
+Offer “Use My Current Location” only when supported and permitted by the browser.
+
+Validate supported service areas.
+
+Do not dispatch a request outside the service area without a clear supported alternative.
+
+## Step 3: Recipient and Destination
+
+Collect:
+- Recipient name.
+- Recipient mobile number.
+- Delivery address.
+- Destination map pin.
+- Landmark.
+- Apartment, office, floor, or gate details.
+- Delivery instructions.
+
+Support a sender and recipient who are different people.
+
+Store sender and recipient information separately.
+
+Do not reveal private recipient information to unassigned drivers or unrelated users.
+
+Allow the customer to review the pickup and destination locations before submitting the booking.
+
+## Step 4: Fare Estimate
+
+Display a transparent fare breakdown.
+
+The fare calculation may include:
+- Base delivery fee.
+- Distance charge.
+- Package size/weight surcharge, if configured.
+- Supported handling surcharge.
+- Applicable taxes.
+- Applicable discounts.
+- Any configured and disclosed urgency charge.
+
+Reuse existing RideNova pricing infrastructure if appropriate.
+
+Use reliable route distance when available. If the Google Routes API is rate-limited, use an explicitly identified fallback and do not misrepresent an approximate straight-line distance as an exact road distance.
+
+The backend must calculate or validate the final amount using trusted configuration.
+
+Never trust a client-submitted price, commission, discount, or final payable amount.
+
+Display the currency explicitly.
+
+Show an itemised estimate and clearly explain which elements can change.
+
+Before booking, show:
+- Parcel details.
+- Pickup address.
+- Destination address.
+- Recipient information.
+- Estimated distance.
+- Estimated travel duration, if available.
+- Fare breakdown.
+- Selected payment method.
+
+Do not use arbitrary example fares in production.
+
+## Step 5: Payment Selection
+
+Offer two methods:
+
+1. Online Prepaid.
+2. Cash at Pickup.
+
+Explain the payment process clearly before the customer confirms.
+
+Online Prepaid:
+- Initiate a real payment session through the configured provider.
+- Confirm payment on the backend.
+- Do not dispatch until payment confirmation succeeds.
+- If payment fails or remains pending, display the actual status and a safe retry option.
+
+Cash at Pickup:
+- The customer agrees to pay the shown delivery amount in cash to the driver at pickup.
+- The request must carry an explicit cash-payment state.
+- The driver must record collection before pickup is confirmed.
+- No duplicate online charge may be created for the same delivery fee.
+
+The backend must ensure that an unpaid online-prepaid request cannot be dispatched as though it were paid.
+
+## Booking confirmation
+
+After the backend successfully creates the request, display:
+- Unique public delivery reference.
+- Current status.
+- Pickup and destination summaries.
+- Parcel summary.
+- Estimated fare.
+- Payment method and actual payment status.
+- View Delivery Details action.
+- Track Delivery action.
+- Return to Parcel Dashboard action.
+
+Do not show a success page until the backend confirms that the request was actually created.
+
+---
+
+# SECTION 5 — DRIVER DISPATCH AND ACCEPTANCE
+
+Integrate parcel jobs with the existing approved-driver system and dispatch architecture.
+
+Only eligible drivers may receive actionable parcel requests.
+
+Eligibility must check:
+- Authenticated driver identity.
+- Required driver approval.
+- Required vehicle approval.
+- Driver availability.
+- Existing active-job restrictions.
+- Supported service area.
+- Parcel size and weight eligibility.
+- Valid and sufficiently recent location data where required.
+
+Pending, rejected, suspended, or otherwise ineligible drivers must not accept new parcel jobs.
+
+Do not weaken passenger-ride driver approval rules.
+
+## Driver request card
+
+Display:
+- Parcel reference.
+- Approximate pickup area.
+- Distance to pickup where available.
+- Delivery area.
+- Estimated delivery distance and duration where available.
+- Parcel category and size.
+- Package count.
+- Relevant handling requirements.
+- Estimated driver earnings based on configured rules.
+- Offer expiry countdown if the dispatch system uses one.
+- Accept and Decline actions.
+
+Before assignment, reveal only the information required for the driver to decide whether to accept.
+
+## Atomic acceptance
+
+Driver acceptance must be a server-authoritative atomic operation.
+
+If two drivers accept simultaneously, only one may be assigned.
+
+Validate the current request state and driver eligibility inside the transaction or appropriate atomic database operation.
+
+A losing driver must receive a clear “This delivery has already been assigned” response.
+
+Prevent the same driver from accepting the same request twice.
+
+After assignment:
+- Save the driver assignment.
+- Record a status event.
+- Notify the customer.
+- Update the driver's active jobs.
+- Update the customer and driver screens.
+- Make the full assigned-delivery details accessible to the customer.
+
+Use the existing real-time system where available, with a polling or API-refresh fallback.
+
+Do not create a separate fake dispatch list.
+
+## Driver navigation to pickup
+
+Display pickup navigation through the existing Google Maps integration.
+
+Provide:
+- Pickup address.
+- Sender contact method according to privacy rules.
+- Parcel summary.
+- Delivery reference.
+- Status timeline.
+- Arrived at Pickup action.
+
+Do not allow the driver to claim arrival for an unassigned delivery.
+
+Where appropriate, use location proximity as a supporting check, not as infallible proof.
+
+---
+
+# SECTION 6 — PICKUP OTP AND PICKUP EVIDENCE
+
+Implement a real pickup verification workflow.
+
+## Pickup OTP
+
+Generate a secure, random, delivery-specific pickup OTP using a cryptographically secure server-side random number generator.
+
+Use a suitable expiry policy and attempt limit.
+
+Associate the code with:
+- Delivery ID.
+- Verification purpose.
+- Expiry timestamp.
+- Verification state.
+- Attempt count.
+- Successful verification timestamp.
+
+Do not store raw OTPs in ordinary application logs.
+
+Expose the pickup OTP only to the authorised sender/customer through the permitted delivery-details flow.
+
+Do not expose OTPs in public delivery lists or to unrelated drivers.
+
+The assigned driver must see an input field labelled:
+
+“Enter Pickup OTP”
+
+The driver enters the code provided by the sender and presses:
+
+“Verify Pickup OTP”
+
+The backend must verify:
+- The authenticated user is the assigned driver.
+- The delivery is in the correct state.
+- The OTP matches the delivery and purpose.
+- The OTP has not expired.
+- The attempt limit has not been exceeded.
+- The OTP has not already been consumed.
+
+If verification fails:
+- Reject the operation.
+- Keep the delivery in the previous valid state.
+- Display a clear error.
+- Apply rate limits and failed-attempt controls.
+
+Do not allow frontend-only verification or bypasses through another endpoint.
+
+## Pickup evidence
+
+After the appropriate OTP verification, require the configured pickup evidence.
+
+Capture or upload:
+- Clear parcel-condition photograph.
+- Sealed-package photograph where appropriate.
+- Package count confirmation.
+- Server-recorded timestamp.
+- Driver and delivery references.
+- Verification result.
+- Optional permitted location metadata.
+
+The UI must support:
+- Camera capture.
+- Image preview.
+- Retake.
+- Upload progress.
+- Validation errors.
+- Safe retry.
+
+The backend must associate every evidence record with the correct delivery and authorised driver.
+
+Do not accept arbitrary image URLs supplied by the client without validating storage ownership and access permissions.
+
+If mandatory evidence is missing or upload fails, pickup cannot be confirmed.
+
+## Cash collection at pickup
+
+For cash-at-pickup requests, display the amount due clearly to the driver and sender.
+
+The driver must explicitly record:
+- Amount collected.
+- Currency.
+- Collection timestamp.
+- Driver identity.
+- Delivery reference.
+- Payment method.
+- Cash collection status.
+
+Validate that the amount matches the authorised delivery amount or the approved adjustment rules.
+
+Do not let the driver silently change the fare.
+
+Provide a sender-facing acknowledgement after the server records collection.
+
+A driver tapping “Cash Received” is not independent proof of payment, so preserve an auditable record and provide a dispute workflow.
+
+Do not also charge the same delivery fee online.
+
+Only after required pickup verification, evidence, and cash-collection conditions succeed may the backend transition the parcel to PICKED_UP.
+
+---
+
+# SECTION 7 — DELIVERY JOURNEY AND LIVE TRACKING
+
+After pickup verification, the assigned driver sees:
+
+“Start Delivery”
+
+The backend must reject this action if:
+- The parcel is not picked up.
+- Required pickup evidence is missing.
+- The driver is not assigned.
+- Required payment conditions have not succeeded.
+- The delivery is cancelled or otherwise ineligible.
+
+After the driver starts delivery:
+- Transition the status to IN_TRANSIT.
+- Record the event.
+- Notify the customer.
+- Update the customer dashboard.
+- Update the driver dashboard.
+- Begin eligible location updates.
+
+## Live tracking
+
+Reuse the existing Google Maps and real-time infrastructure.
+
+When the driver has granted location permission, update the driver's latest location at a reasonable frequency during active delivery.
+
+Display:
+- Driver's last known location where available.
+- Destination.
+- Delivery status.
+- Estimated arrival time when reliably calculated.
+- Last update time.
+- Driver and vehicle details.
+- Delivery reference.
+
+Do not fake a live moving marker or invent ETA values.
+
+If live location is unavailable, display an honest message and continue showing the latest authoritative delivery status.
+
+Respect permissions and privacy. Do not expose a driver's live location outside the assigned active delivery.
+
+## Persistent delivery details
+
+This is a critical requirement.
+
+Customers must be able to access delivery details at any time after booking, regardless of whether:
+- A popup has been dismissed.
+- They return to the dashboard.
+- They refresh the browser.
+- They log in again.
+- The real-time connection temporarily fails.
+- The delivery moves through a different status.
+
+Add a persistent “View Delivery Details” button/card for every active delivery.
+
+The details page must display:
+- Delivery reference.
+- Current status.
+- Parcel photos and summary.
+- Pickup address.
+- Destination address.
+- Sender and recipient details as permitted.
+- Assigned driver's actual name and available profile details.
+- Vehicle details when applicable.
+- Estimated distance.
+- Estimated duration or ETA when available.
+- Payment method and payment status.
+- Pickup OTP access when relevant.
+- Delivery OTP access when relevant.
+- Pickup evidence after collection.
+- Delivery evidence after completion.
+- Status timeline.
+- Support and permitted cancellation actions.
+
+Do not make the customer rely on a one-time popup to access any important information.
+
+Load delivery details from the backend using the authenticated user's identity and authorised delivery ID.
+
+Never return one customer's delivery details to another customer.
+
+---
+
+# SECTION 8 — DESTINATION OTP AND PROOF OF DELIVERY
+
+When the driver reaches the destination, show:
+
+“Arrived at Destination”
+
+Do not mark the delivery complete merely because the driver reaches the destination coordinates.
+
+## Delivery OTP
+
+Generate a separate delivery OTP associated with the specific parcel delivery and intended recipient workflow.
+
+Do not reuse the pickup OTP.
+
+The authorised customer/recipient should have access to the delivery OTP through the approved flow. The driver must obtain the code from the intended recipient during the handover.
+
+The driver interface must include:
+
+- Delivery reference.
+- Destination details.
+- Delivery evidence capture.
+- Input labelled “Enter Delivery OTP”.
+- “Verify Delivery OTP” action.
+- A completion action enabled only after required checks pass.
+
+The backend must validate:
+- Assigned driver identity.
+- Delivery state.
+- Correct delivery OTP.
+- Expiry.
+- Attempt limits.
+- One-time use.
+- Required evidence.
+- Payment and other completion conditions.
+
+Incorrect or expired OTPs must not complete the delivery.
+
+If the recipient is unavailable, provide an exception workflow. Never offer a normal completion bypass.
+
+## Delivery evidence
+
+Capture:
+- Delivered parcel photograph.
+- Timestamp.
+- Delivery reference.
+- Assigned driver.
+- Verified delivery OTP result.
+- Optional justified location metadata.
+- Recipient confirmation where supported.
+
+Do not require a recipient's face or identity document by default.
+
+Upload evidence to protected storage and associate it with the correct delivery.
+
+## Completion
+
+The backend must transition to DELIVERED only when all required conditions succeed.
+
+After successful completion:
+- Save the completion timestamp.
+- Record the final status event.
+- Consume the delivery OTP.
+- Preserve permitted delivery evidence.
+- Notify the customer.
+- Update the driver dashboard.
+- Create or finalise the receipt.
+- Update eligible driver earnings and ledger entries exactly once.
+- Remove the delivery from active jobs.
+- Retain the delivery in history.
+
+Make completion idempotent. Repeated requests must not create duplicate receipts, commissions, payments, or earnings.
+
+---
+
+# SECTION 9 — PAYMENT IMPLEMENTATION
+
+Inspect and reuse the existing payment integration where possible.
+
+For online prepaid, integrate with the configured payment provider. If Stripe is already implemented, reuse its existing architecture instead of adding duplicate payment systems.
+
+Keep all payment secrets on the backend. Never expose secret keys in frontend code, client bundles, public API responses, or source-controlled environment files.
+
+## Online prepaid workflow
+
+1. Customer confirms the delivery and chooses Online Prepaid.
+2. Backend recalculates or validates the authoritative payable amount.
+3. Backend creates a payment record with a unique internal reference.
+4. Backend creates the provider checkout/payment session.
+5. Frontend redirects or opens the secure payment interface.
+6. Provider reports the result through the configured webhook.
+7. Backend verifies the webhook signature and authoritative payment status.
+8. Backend updates the payment record idempotently.
+9. Dispatch becomes eligible only after confirmed payment.
+10. Customer sees the verified payment state and receipt.
+
+Do not treat a success redirect as sufficient proof of payment.
+
+Handle pending, failed, expired, duplicated, and delayed payment events.
+
+Use provider idempotency where supported.
+
+If payment credentials or provider approval are unavailable, show an explicit configuration error and document the exact missing setting. Never fake a paid state.
+
+## Cash-at-pickup workflow
+
+For cash-at-pickup:
+- Mark the payment method as CASH_AT_PICKUP.
+- Do not create an online charge for the same fee.
+- Require the configured cash collection record at pickup.
+- Record amount, timestamp, driver, and delivery reference.
+- Show the sender a cash-collection acknowledgement.
+- Keep cash reconciliation status separate from delivery status.
+
+The cash payment state must not falsely imply that an online provider processed the transaction.
+
+## Payment and delivery state are separate
+
+Maintain separate delivery and payment statuses.
+
+Suggested payment states include:
+- UNPAID.
+- PAYMENT_PENDING.
+- PAID.
+- CASH_DUE.
+- CASH_COLLECTED.
+- PAYMENT_FAILED.
+- REFUND_PENDING.
+- PARTIALLY_REFUNDED.
+- REFUNDED.
+
+Adapt this list to the existing schema where appropriate. Do not add redundant status fields without a reason.
+
+A delivery may be in transit after an online payment is confirmed. Payment success does not mean delivery success.
+
+Delivery completion does not automatically prove payment success.
+
+## Refunds
+
+Implement refund handling consistent with the configured provider and published policy.
+
+Record:
+- Original payment reference.
+- Refund amount.
+- Reason.
+- Provider refund reference.
+- Status.
+- Timestamps.
+- Authorised actor.
+
+Do not claim a refund is complete until the provider or backend confirms it.
+
+For cash transactions, record the refund or reconciliation action explicitly rather than pretending it was a provider refund.
+
+---
+
+# SECTION 10 — ADMIN DASHBOARD
+
+Add a dedicated “Parcel Deliveries” area to the existing RideNova admin dashboard.
+
+Use the existing admin authentication and role enforcement. Do not create a new public admin mechanism.
+
+## Admin overview
+
+Show real database counts and records for:
+- New requests.
+- Searching requests.
+- Assigned deliveries.
+- Awaiting pickup.
+- Picked-up parcels.
+- In-transit parcels.
+- Deliveries awaiting completion.
+- Delivered parcels.
+- Cancelled and failed deliveries.
+- Open disputes.
+- Online payments.
+- Cash collections.
+- Refunds.
+
+Use honest empty states. Never generate fake orders, earnings, or statistics.
+
+## Admin parcel table
+
+Provide filters for:
+- Delivery reference.
+- Customer.
+- Driver.
+- Status.
+- Payment method.
+- Payment status.
+- Date range.
+- Service area.
+
+Support pagination and useful loading/error states.
+
+## Admin parcel detail view
+
+Display:
+- Delivery and customer references.
+- Sender and recipient details according to permissions.
+- Parcel description, package count, size, and weight.
+- Uploaded parcel photos.
+- Pickup and destination.
+- Assigned driver and vehicle.
+- Status timeline.
+- Pickup OTP verification result.
+- Delivery OTP verification result.
+- Pickup and delivery evidence.
+- Payment records.
+- Cash collection records.
+- Refund history.
+- Cancellation reasons.
+- Support and dispute records.
+
+Never expose raw OTPs or payment secrets in the admin table, ordinary logs, or unrestricted API responses. Show verification status and necessary audit information instead.
+
+## Admin actions
+
+Where authorised, provide controlled workflows for:
+- Investigating a delivery.
+- Handling failed pickup.
+- Managing a return or recovery.
+- Cancelling an eligible delivery.
+- Reviewing evidence.
+- Resolving disputes.
+- Initiating permitted refunds.
+- Correcting records through audited procedures.
+
+Require confirmation and a reason for sensitive actions.
+
+Do not allow an administrator to casually bypass required verification and mark a parcel delivered without a documented, authorised exception process.
+
+Record administrative changes in an audit log.
+
+---
+
+# SECTION 11 — CANCELLATION AND EXCEPTION WORKFLOWS
+
+Implement explicit handling for:
+
+1. Customer cancels before driver assignment.
+2. Customer cancels after driver assignment but before pickup.
+3. Driver declines an offer.
+4. Driver cancels before pickup.
+5. Driver cannot find the pickup address.
+6. Sender is unavailable.
+7. Pickup OTP fails.
+8. Pickup evidence upload fails.
+9. Cash collection is disputed.
+10. Driver cancels after pickup.
+11. Driver's vehicle becomes unavailable.
+12. Recipient is unavailable.
+13. Delivery OTP fails.
+14. Delivery evidence upload fails.
+15. Customer disputes the delivery.
+16. Parcel is reported damaged or missing.
+17. Online payment fails.
+18. Payment succeeds but the browser closes.
+19. Payment webhook is delayed or repeated.
+20. The real-time connection disconnects.
+21. The backend or database temporarily becomes unavailable.
+
+A parcel already collected must never be treated as an ordinary uncollected request.
+
+After collection, cancellation must preserve the custody state and route the case through an authorised return/recovery workflow.
+
+Provide the customer with meaningful statuses and clear next steps.
+
+Do not silently discard active delivery records.
+
+---
+
+# SECTION 12 — DATA MODEL AND DATABASE MIGRATIONS
+
+Inspect the current schema before making changes.
+
+Use additive, backward-compatible migrations wherever possible.
+
+Do not drop or reset production tables. Do not delete customer or driver records. Do not overwrite existing driver approvals, role assignments, notification read states, payment records, or ride history.
+
+Design the parcel data model around the existing database conventions.
+
+Potential entities include:
+
+A. Parcel deliveries
+- Internal ID.
+- Unique public reference.
+- Customer/sender ID.
+- Recipient details.
+- Pickup and destination.
+- Parcel details.
+- Photo references.
+- Assigned driver.
+- Delivery status.
+- Pricing breakdown.
+- Payment method and state.
+- Relevant timestamps.
+
+B. Parcel status events
+- Delivery ID.
+- Previous and new status.
+- Actor and role.
+- Timestamp.
+- Reason or metadata.
+
+C. Parcel evidence
+- Delivery ID.
+- Evidence type.
+- Protected storage reference.
+- Uploader.
+- Timestamp.
+- Associated verification result.
+
+D. Parcel payments
+- Delivery ID.
+- Internal payment reference.
+- Provider reference if applicable.
+- Method.
+- Amount and currency.
+- Status.
+- Refund information.
+- Relevant timestamps.
+
+E. Parcel support/dispute records, if compatible with existing support infrastructure.
+
+Reuse existing notifications, users, drivers, vehicles, payments, and support tables when appropriate. Do not create duplicate tables for capabilities already implemented correctly.
+
+Use appropriate:
+- Foreign keys.
+- Unique constraints.
+- Check constraints.
+- Indexes.
+- Transactions.
+- Idempotency keys.
+- Access-control policies.
+
+If Supabase RLS is used, implement and verify appropriate policies without accidentally exposing sensitive delivery information.
+
+Keep private files private.
+
+If migrations are required, create them through the repository's established migration mechanism.
+
+Do not claim that a migration has run against production unless execution and verification actually occurred.
+
+---
+
+# SECTION 13 — API AND AUTHORIZATION
+
+Follow the existing Express route/controller/service/repository conventions.
+
+Use consistent API response formats and error handling.
+
+Implement the required operations for:
+- Creating parcel deliveries.
+- Listing the current customer's deliveries.
+- Viewing an authorised delivery.
+- Listing eligible parcel offers for a driver.
+- Accepting and declining offers.
+- Updating arrival status.
+- Generating or retrieving authorised OTPs.
+- Verifying pickup OTP.
+- Uploading pickup evidence.
+- Recording cash collection.
+- Confirming pickup.
+- Starting delivery.
+- Updating permitted location information.
+- Recording destination arrival.
+- Verifying delivery OTP.
+- Uploading delivery evidence.
+- Completing delivery.
+- Cancelling or reporting an exception.
+- Initiating and confirming payment.
+- Handling provider webhooks.
+- Viewing authorised receipts.
+- Admin parcel management.
+
+Exact route names must follow the current project conventions.
+
+For every sensitive endpoint:
+- Authenticate the request.
+- Derive the user identity from the verified session/token.
+- Check the required role.
+- Check ownership or assignment.
+- Validate the current delivery state.
+- Validate the request schema.
+- Apply rate limits where appropriate.
+- Use database transactions for related changes.
+- Return safe, useful errors.
+- Avoid exposing secrets or unrelated customer data.
+
+Never trust client-submitted role, driver assignment, payment confirmation, final fare, OTP-verification status, or delivery-completed status.
+
+Do not bypass Clerk authentication or create a parallel insecure authentication system.
+
+---
+
+# SECTION 14 — REAL-TIME UPDATES AND NOTIFICATIONS
+
+Reuse the existing Supabase Realtime or equivalent infrastructure where it is working.
+
+Publish status changes only after the corresponding database transaction commits.
+
+Ensure:
+- Customer subscriptions are filtered to the authorised delivery.
+- Driver subscriptions are filtered to assigned deliveries and eligible offers.
+- Reconnection refreshes current state from the backend.
+- Duplicate events do not cause duplicate side effects.
+- Polling or explicit API refresh is available as a fallback.
+- Notifications are persisted where appropriate.
+- Reading a notification persists its read state.
+
+Create useful notifications for:
+- Request created.
+- Driver assigned.
+- Driver approaching pickup.
+- Pickup verified.
+- Parcel collected.
+- Delivery started.
+- Driver approaching destination.
+- Delivery completed.
+- Payment confirmed.
+- Cancellation or delivery exception.
+- Refund updates.
+
+Do not rely exclusively on a browser popup. The same information must remain accessible from the dashboard and delivery-details page.
+
+Do not report a status update to the user until the backend has confirmed the change.
+
+---
+
+# SECTION 15 — SECURITY, PRIVACY, AND PROHIBITED ITEMS
+
+Implement a clear permitted/prohibited-items policy appropriate for the service's operating jurisdiction.
+
+Require the sender to declare the parcel category and acknowledge the policy.
+
+Use secure photo storage and authorised access to images.
+
+Do not expose full private addresses, phone numbers, OTPs, or evidence to unrelated users.
+
+Do not log raw OTPs, payment secrets, or sensitive authentication tokens.
+
+Use secure handling of uploaded files, including file type and size validation and safe storage references.
+
+Respect browser permissions and data minimisation for location.
+
+Define a reasonable evidence retention policy.
+
+Do not require recipient facial photographs or identity documents by default.
+
+Provide a safe workflow for suspected prohibited items, damage, missing parcels, and delivery disputes.
+
+---
+
+# SECTION 16 — TESTING AND ACCEPTANCE CRITERIA
+
+Write and actually execute appropriate tests.
+
+Include unit tests, integration tests, and frontend workflow checks where supported by the existing repository.
+
+At minimum, verify the following:
+
+CUSTOMER:
+1. Valid parcel booking is saved.
+2. Invalid form data is rejected.
+3. Photo upload failure is handled.
+4. Customer can view the delivery after leaving the confirmation page.
+5. Delivery details survive browser refresh.
+6. Customer cannot view another customer's delivery.
+7. Customer sees actual driver information after assignment.
+8. Customer sees authoritative status updates.
+9. Customer can access permitted OTP information at the correct stage.
+10. Customer can access the final receipt and delivery evidence.
+
+DRIVER:
+11. Unapproved drivers cannot accept parcel jobs.
+12. Only one driver can accept a delivery.
+13. Unassigned drivers cannot change its status.
+14. Incorrect pickup OTP is rejected.
+15. Expired pickup OTP is rejected.
+16. Pickup cannot complete without required evidence.
+17. Cash collection cannot be recorded for an incorrect amount.
+18. Delivery cannot start before valid pickup.
+19. Incorrect delivery OTP is rejected.
+20. Delivery cannot complete without required evidence.
+21. Repeated completion does not duplicate earnings.
+22. Driver cancellation after pickup triggers the correct exception workflow.
+
+PAYMENTS:
+23. Online payment is verified by the backend.
+24. Browser redirect alone cannot mark a payment paid.
+25. Unpaid prepaid deliveries cannot dispatch.
+26. Cash-at-pickup does not create a duplicate online charge.
+27. Duplicate webhooks are handled idempotently.
+28. Payment failure is displayed honestly.
+29. Refund status is not fabricated.
+
+ADMIN:
+30. Admin views real records only.
+31. Unauthorised users cannot access admin endpoints.
+32. Sensitive actions require permission and appropriate confirmation.
+33. Evidence and payment records can be reviewed according to permissions.
+34. Administrative changes are audited.
+
+PERSISTENCE AND REAL TIME:
+35. Delivery records survive backend restarts.
+36. Driver assignment and status survive refresh.
+37. Status updates appear on both customer and driver interfaces.
+38. A disconnected client can recover the current state.
+39. Migrations do not reset existing data.
+40. Existing passenger ride functionality remains intact.
+
+Add further tests based on the actual codebase and any discovered edge cases.
+
+Do not remove existing tests to obtain a passing result.
+
+Run the available frontend and backend build/type-check commands and the actual relevant test suite. Report the real results, including failures and any tests that could not be executed.
+
+---
+
+# SECTION 17 — IMPLEMENTATION AND DEPLOYMENT RULES
+
+Implement in coherent steps, but do not stop after a plan or backend-only change.
+
+Required implementation sequence:
+
+1. Inspect existing architecture.
+2. Document the current relevant files and reuse points.
+3. Implement the data model and safe migrations.
+4. Implement backend services and authorization.
+5. Implement customer booking UI.
+6. Implement persistent customer delivery details and history.
+7. Implement driver offer, acceptance, pickup verification, and evidence UI.
+8. Implement transit and destination verification UI.
+9. Implement payment and cash collection workflows.
+10. Implement admin management.
+11. Connect real-time events and persistent notifications.
+12. Execute tests and builds.
+13. Fix discovered errors.
+14. Verify end-to-end behaviour.
+15. Provide a concise implementation report.
+
+Maintain the existing application's working passenger ride functionality.
+
+Do not overwrite production environment variables.
+
+Do not print secret keys or request the user to paste secrets into chat or source code.
+
+Use test-mode payment credentials for initial verification.
+
+Do not execute destructive database resets.
+
+Do not use mock data to simulate production success.
+
+Do not mark a test as passed if it was not run.
+
+If an external configuration is missing, identify the exact environment variable or service configuration required and distinguish that limitation from code implementation.
+
+If you cannot verify a workflow against a real database or payment provider, say so explicitly.
+
+## Frontend verification is mandatory
+
+For each implemented backend capability, verify that the corresponding frontend action exists and calls the correct API.
+
+For each frontend action, verify that the backend validates and persists the change.
+
+A backend endpoint alone is not a completed feature.
+
+A frontend button alone is not a completed feature.
+
+Both sides must work together.
+
+---
+
+# SECTION 18 — FINAL DELIVERY REPORT
+
+After implementing the feature, provide a factual report with:
+
+1. Summary of the actual features implemented.
+2. Customer UI changes.
+3. Driver UI changes.
+4. Admin UI changes.
+5. Backend files changed.
+6. Frontend files changed.
+7. Database migrations created and their actual execution status.
+8. API endpoints added or modified.
+9. Photo storage configuration.
+10. Pickup OTP workflow and verification rules.
+11. Delivery OTP workflow and verification rules.
+12. Online payment implementation status.
+13. Cash-at-pickup implementation status.
+14. Real-time tracking and notification implementation.
+15. Tests actually executed and their results.
+16. Frontend build and type-check results.
+17. Backend build and type-check results.
+18. Any remaining configuration or deployment requirements.
+19. Exact manual steps needed to verify the feature using separate customer, driver, and admin accounts.
+
+List only files actually changed.
+
+Do not invent successful deployments, database migrations, test results, payment transactions, or completed workflows.
+
+If any part remains incomplete, identify the exact missing part and continue implementation wherever possible instead of declaring the entire task complete.
+
+# FINAL OBJECTIVE
+
+The final result must be a genuinely working RideNova Door-to-Door Parcel Delivery service with:
+
+- Professional customer booking UI.
+- Real parcel photo uploads.
+- Pickup and destination address management.
+- Trusted fare calculation.
+- Online prepaid and cash-at-pickup.
+- Real driver discovery and atomic acceptance.
+- Separate pickup and delivery OTPs.
+- Mandatory pickup and delivery evidence.
+- Persistent delivery details and history.
+- Actual driver information for the customer.
+- Real-time status and available location updates.
+- Protected payment and delivery workflows.
+- Admin monitoring and dispute management.
+- Secure backend validation and persistent database records.
+- Comprehensive tests and honest verification results.
+
+Do the implementation now. Do not return only a proposal or a list of future steps.

@@ -169,6 +169,7 @@ export interface RideWithStops {
   otp_code?: string | null;
   otp_verified?: boolean;
   cancellation_fee?: number | null;
+  scheduled_at?: string | null;
   accepted_at?: string | null;
   started_at?: string | null;
   completed_at?: string | null;

@@ -5,6 +5,7 @@ import { routeService, RouteCalculationResult } from './route.service.ts';
 import { logger } from '../utils/logger.ts';
 import { extendedRepository } from '../repositories/extended.repository.ts';
 import { ValidationError } from './driver.service.ts';
+import { isWithinServiceArea } from '../utils/serviceArea.ts';
 
 export const rideService = {
   /**
@@ -34,6 +35,19 @@ export const rideService = {
    * Enforces status = 'requested', driver_id = null.
    */
   async createRide(riderId: string, input: CreateRideInput): Promise<RideWithStops> {
+    // 0. Validate Service Area
+    const locations = [
+      { lat: input.pickupLatitude, lng: input.pickupLongitude, label: 'pickup location' },
+      { lat: input.destinationLatitude, lng: input.destinationLongitude, label: 'destination' },
+      ...(input.stops || []).map((s) => ({ lat: s.latitude, lng: s.longitude, label: `stop ${s.stopOrder}` })),
+    ];
+
+    for (const loc of locations) {
+      if (!isWithinServiceArea(loc.lat, loc.lng)) {
+        throw new ValidationError(`Sorry, RideNova currently serves Vadodara and nearby areas within our service radius. The ${loc.label} is outside our current service area.`);
+      }
+    }
+
     // 1. Authoritative server-side route calculation
     // Preserves strict sequential waypoint ordering: Pickup -> Stop 1 -> Stop 2 -> Destination
     const routeResult = await routeService.calculateRoute(
@@ -98,6 +112,10 @@ export const rideService = {
         priority_level: input.priorityLevel || 'normal',
         incentive_amount: incentive,
         expires_at: expiresAt,
+        scheduled_at: input.scheduledAt || null,
+        booking_mode: input.scheduledAt ? 'scheduled' : 'on-demand',
+        payment_status: 'pending', // Will be updated after payment
+        admin_review_status: input.scheduledAt ? 'pending' : 'approved',
       },
       (input.stops || []).map((s) => ({
         stop_order: s.stopOrder,

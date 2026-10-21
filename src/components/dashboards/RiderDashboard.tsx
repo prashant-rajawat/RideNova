@@ -27,6 +27,8 @@ import {
   LifeBuoy,
   Calendar,
   AlertTriangle,
+  Eye,
+  X,
 } from 'lucide-react';
 import { DashboardLayout } from '../layout/DashboardLayout.tsx';
 import { useAuthSession } from '../../context/AuthContext.tsx';
@@ -43,6 +45,7 @@ import { api } from '../../lib/api.ts';
 import { useRideSubscription } from '../../hooks/useRideSubscription.ts';
 import { CustomerHome } from './CustomerHome.tsx';
 import { BottomNav } from '../layout/BottomNav.tsx';
+import { TripDetailsModal } from '../booking/TripDetailsModal.tsx';
 
 interface RiderDashboardProps {
   onNavigate: (route: string) => void;
@@ -60,6 +63,14 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({ onNavigate }) =>
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Trip details modal state
+  const [selectedTripDetailsId, setSelectedTripDetailsId] = useState<string | null>(null);
+  const [isTripDetailsOpen, setIsTripDetailsOpen] = useState<boolean>(false);
+
+  // Rider Cancel Modal state
+  const [cancelModalRideId, setCancelModalRideId] = useState<string | null>(null);
+  const [cancelModalReason, setCancelModalReason] = useState<string>('Change of plans');
 
   // Active receipt modal state
   const [activeReceipt, setActiveReceipt] = useState<ReceiptData | null>(null);
@@ -157,14 +168,19 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({ onNavigate }) =>
   // Subscribe to live status updates for active ride
   useRideSubscription(activeRide?.id || '', fetchData);
 
-  // Cancel ride handler
-  const handleCancelRide = async (rideId: string) => {
-    if (!window.confirm('Are you sure you want to cancel this ride request?')) return;
+  // Cancel ride handler - opens confirmation modal
+  const handleCancelRide = (rideId: string) => {
+    setCancelModalRideId(rideId);
+  };
+
+  const handleConfirmCancelRide = async () => {
+    if (!cancelModalRideId) return;
     setActionLoading(true);
     try {
-      const res = await api.cancelRide(rideId, 'Cancelled by rider from dashboard');
+      const res = await api.cancelRide(cancelModalRideId, cancelModalReason);
       if (res.success) {
         showSuccess('Ride cancelled successfully.');
+        setCancelModalRideId(null);
         fetchData();
       }
     } catch (err: any) {
@@ -341,6 +357,10 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({ onNavigate }) =>
           activeRide={activeRide} 
           onCancelRide={handleCancelRide} 
           actionLoading={actionLoading}
+          onViewTripDetails={(id) => {
+            setSelectedTripDetailsId(id);
+            setIsTripDetailsOpen(true);
+          }}
         />
       )}
 
@@ -412,6 +432,18 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({ onNavigate }) =>
                     <span>{new Date(r.created_at).toLocaleString()}</span>
 
                     <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedTripDetailsId(r.id);
+                          setIsTripDetailsOpen(true);
+                        }}
+                        className="px-2.5 py-1 rounded border border-[#E5E5E5] text-[11px] font-medium text-[#171717] hover:border-[#E21D2B] transition-colors flex items-center gap-1 cursor-pointer"
+                      >
+                        <Eye className="h-3 w-3 text-[#E21D2B]" />
+                        <span>View Details</span>
+                      </button>
+
                       <button
                         onClick={() => handleViewReceipt(r.id)}
                         className="px-2.5 py-1 rounded border border-[#E5E5E5] text-[11px] font-medium text-[#171717] hover:border-[#E21D2B] transition-colors flex items-center gap-1"
@@ -1091,12 +1123,14 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({ onNavigate }) =>
                 <div className="flex justify-between">
                   <span className="text-[#737373]">Vehicle:</span>
                   <span className="text-[#171717]">
-                    {activeRide.driver?.vehicle?.make || 'Toyota Camry'} ({activeRide.driver?.vehicle?.registration_number || 'DL-01-RN-2026'})
+                    {activeRide.driver?.vehicle
+                      ? `${activeRide.driver.vehicle.make} ${activeRide.driver.vehicle.model} (${activeRide.driver.vehicle.registration_number})`
+                      : 'Vehicle details not available yet'}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[#737373]">Driver:</span>
-                  <span className="text-[#171717]">{activeRide.driver?.name || 'Assigned Chauffeur'}</span>
+                  <span className="text-[#171717]">{activeRide.driver?.name || 'Driver not assigned yet'}</span>
                 </div>
                 <div className="truncate text-[11px] text-[#737373] pt-1">
                   <strong>Location:</strong> {activeRide.pickup_address} → {activeRide.destination_address}
@@ -1141,6 +1175,95 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({ onNavigate }) =>
           </div>
         </div>
       )}
+
+      {/* Customer Cancellation Confirmation Modal */}
+      {cancelModalRideId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 animate-fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-[#E5E5E5] relative space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E5E5E5]">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-full bg-[#B91C1C]/10 flex items-center justify-center text-[#B91C1C]">
+                  <AlertCircle className="h-4 w-4" />
+                </div>
+                <h3 className="text-sm font-bold text-[#171717]">Cancel Ride Request</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCancelModalRideId(null)}
+                className="p-1.5 rounded-lg text-[#737373] hover:bg-[#FAFAFA] cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-xs text-[#737373]">
+                Are you sure you want to cancel this trip? Please select a reason below:
+              </p>
+              <div className="space-y-2">
+                {[
+                  'Change of plans',
+                  'Driver taking too long / ETA too far',
+                  'Booked by mistake',
+                  'Wrong pickup location',
+                  'Other reason',
+                ].map((reason) => (
+                  <label
+                    key={reason}
+                    className={`flex items-center gap-3 p-3 rounded-xl border text-xs font-medium cursor-pointer transition-all ${
+                      cancelModalReason === reason
+                        ? 'border-[#B91C1C] bg-[#FFF1F2]/40 text-[#171717]'
+                        : 'border-[#E5E5E5] bg-white text-[#737373] hover:border-[#737373]'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="riderCancelReason"
+                      value={reason}
+                      checked={cancelModalReason === reason}
+                      onChange={(e) => setCancelModalReason(e.target.value)}
+                      className="text-[#B91C1C] focus:ring-[#B91C1C]"
+                    />
+                    <span>{reason}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#E5E5E5]">
+              <button
+                type="button"
+                onClick={() => setCancelModalRideId(null)}
+                disabled={actionLoading}
+                className="px-4 py-2 rounded-xl border border-[#E5E5E5] bg-white text-xs font-semibold text-[#171717] hover:bg-[#FAFAFA] cursor-pointer"
+              >
+                Keep Ride
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmCancelRide}
+                disabled={actionLoading}
+                className="px-5 py-2 rounded-xl bg-[#B91C1C] text-white text-xs font-bold hover:bg-[#991B1B] transition-colors shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {actionLoading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                <span>Confirm Cancellation</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Persistent Customer Trip Details Modal */}
+      <TripDetailsModal
+        isOpen={isTripDetailsOpen}
+        onClose={() => {
+          setIsTripDetailsOpen(false);
+          setSelectedTripDetailsId(null);
+        }}
+        rideId={selectedTripDetailsId || activeRide?.id || null}
+        onNavigate={onNavigate}
+        onCancelRide={handleCancelRide}
+      />
     </DashboardLayout>
   );
 };

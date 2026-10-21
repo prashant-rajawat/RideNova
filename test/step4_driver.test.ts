@@ -447,16 +447,31 @@ async function runStep4Tests() {
       'TEST 21b: Ride transitions to "driver_arrived"'
     );
 
-    const statusStarted = await requestApi(`/api/driver/rides/${createdRideId}/status`, {
+    // Attempt to start trip without OTP verification -> rejected with HTTP 400
+    const startWithoutOtp = await requestApi(`/api/driver/rides/${createdRideId}/status`, {
       method: 'PATCH',
       token: driver1Token,
       body: { status: 'ride_started' },
     });
     assert(
-      statusStarted.status === 200 &&
-        statusStarted.body?.data?.status === 'ride_started' &&
-        statusStarted.body?.data?.started_at !== null,
-      'TEST 21c: Ride transitions to "ride_started" with started_at timestamp'
+      startWithoutOtp.status === 400 &&
+        startWithoutOtp.body?.error?.message?.includes('mandatory passenger OTP verification'),
+      'TEST 21c: Attempting to start trip without OTP verification is strictly rejected'
+    );
+
+    // Retrieve passenger OTP from rider endpoint and verify
+    const riderRideData = await requestApi(`/api/rides/${createdRideId}`, { token: riderToken });
+    const riderOtp = riderRideData.body?.data?.otp_code;
+    const verifyOtpRes = await requestApi(`/api/driver/rides/${createdRideId}/verify-otp`, {
+      method: 'POST',
+      token: driver1Token,
+      body: { otp: riderOtp },
+    });
+    assert(
+      verifyOtpRes.status === 200 &&
+        verifyOtpRes.body?.data?.status === 'ride_started' &&
+        verifyOtpRes.body?.data?.started_at !== null,
+      'TEST 21c-2: Correct OTP verification transitions ride to "ride_started" with started_at timestamp'
     );
 
     const statusCompleted = await requestApi(`/api/driver/rides/${createdRideId}/status`, {
@@ -532,9 +547,132 @@ async function runStep4Tests() {
       token: driver1Token,
       body: { otp: otpCode },
     });
+    // Test 28: Complete second ride
+    const completeSecond = await requestApi(`/api/driver/rides/${secondRideId}/status`, {
+      method: 'PATCH',
+      token: driver1Token,
+      body: { status: 'ride_completed' },
+    });
     assert(
-      correctOtpRes.status === 200 && correctOtpRes.body?.data?.status === 'ride_started',
-      'TEST 27: Correct OTP submission transitions ride to "ride_started"'
+      completeSecond.status === 200 && completeSecond.body?.data?.status === 'ride_completed',
+      'TEST 28: Second ride successfully marked ride_completed'
+    );
+
+    // -------------------------------------------------------------
+    // PHASE 7: CUSTOMER RIDE CANCELLATION & SCHEDULED RIDE OFFLINE ELIGIBILITY
+    // -------------------------------------------------------------
+    console.log('\n--- Phase 7: Customer Cancellation & Scheduled Ride Offline Rules ---');
+
+    // Test 29: Customer Ride Cancellation Flow
+    const cancellableRideRes = await requestApi('/api/rides', {
+      method: 'POST',
+      token: riderToken,
+      body: {
+        pickupAddress: 'Connaught Place, New Delhi',
+        pickupLatitude: 28.6315,
+        pickupLongitude: 77.2167,
+        destinationAddress: 'Indira Gandhi International Airport, New Delhi',
+        destinationLatitude: 28.5562,
+        destinationLongitude: 77.1000,
+        rideType: 'comfort',
+      },
+    });
+    const cancellableRideId = cancellableRideRes.body?.data?.id;
+
+    const cancelRes = await requestApi(`/api/rides/${cancellableRideId}/cancel`, {
+      method: 'POST',
+      token: riderToken,
+      body: { reason: 'Change of plans' },
+    });
+    assert(
+      cancelRes.status === 200 &&
+        cancelRes.body?.data?.status === 'cancelled' &&
+        cancelRes.body?.data?.cancellation_reason === 'Change of plans',
+      'TEST 29: Customer ride cancellation successfully updates ride status to "cancelled" with reason'
+    );
+
+    // Test 30: Driver CAN go offline when having ONLY future scheduled rides
+    const futureTime = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const scheduledRideRes = await requestApi('/api/rides', {
+      method: 'POST',
+      token: riderToken,
+      body: {
+        pickupAddress: 'Cyber City, Gurugram',
+        pickupLatitude: 28.4950,
+        pickupLongitude: 77.0895,
+        destinationAddress: 'Aerocity, New Delhi',
+        destinationLatitude: 28.5492,
+        destinationLongitude: 77.1215,
+        rideType: 'premium',
+        scheduledAt: futureTime,
+      },
+    });
+    const scheduledRideId = scheduledRideRes.body?.data?.id;
+
+    // Driver 1 accepts the future scheduled ride
+    const acceptScheduledRes = await requestApi(`/api/rides/${scheduledRideId}/accept`, {
+      method: 'POST',
+      token: driver1Token,
+    });
+    assert(
+      acceptScheduledRes.status === 200 && acceptScheduledRes.body?.data?.status === 'accepted',
+      'TEST 30a: Driver 1 successfully assigned to future scheduled ride'
+    );
+
+    // Driver 1 attempts to switch to offline: MUST SUCCEED because they only have future scheduled rides!
+    const goOfflineWithScheduledRes = await requestApi('/api/driver/availability', {
+      method: 'PATCH',
+      token: driver1Token,
+      body: { isOnline: false },
+    });
+    assert(
+      goOfflineWithScheduledRes.status === 200 &&
+        goOfflineWithScheduledRes.body?.data?.isOnline === false,
+      'TEST 30b: Driver CAN go offline when having ONLY future scheduled rides'
+    );
+
+    // Test 31: Driver goes back online and cannot go offline once an active on-demand trip is accepted
+    const backOnlineRes = await requestApi('/api/driver/availability', {
+      method: 'PATCH',
+      token: driver1Token,
+      body: { isOnline: true },
+    });
+    assert(
+      backOnlineRes.status === 200 && backOnlineRes.body?.data?.isOnline === true,
+      'TEST 31a: Driver successfully switches back online'
+    );
+
+    const onDemandRideRes = await requestApi('/api/rides', {
+      method: 'POST',
+      token: riderToken,
+      body: {
+        pickupAddress: 'Sector 29, Gurugram',
+        pickupLatitude: 28.4682,
+        pickupLongitude: 77.0632,
+        destinationAddress: 'Golf Course Road, Gurugram',
+        destinationLatitude: 28.4595,
+        destinationLongitude: 77.0950,
+        rideType: 'comfort',
+      },
+    });
+    const onDemandRideId = onDemandRideRes.body?.data?.id;
+
+    // Driver accepts active on-demand ride
+    await requestApi(`/api/rides/${onDemandRideId}/accept`, {
+      method: 'POST',
+      token: driver1Token,
+    });
+
+    // Driver now attempts to go offline: MUST BE REJECTED with HTTP 400
+    const offlineWithActiveTripRes = await requestApi('/api/driver/availability', {
+      method: 'PATCH',
+      token: driver1Token,
+      body: { isOnline: false },
+    });
+    assert(
+      offlineWithActiveTripRes.status === 400 &&
+        offlineWithActiveTripRes.body?.error?.message?.includes('active on-demand trip'),
+      'TEST 31b: Driver CANNOT go offline while having an active on-demand trip in progress'
     );
   } finally {
     server.close();

@@ -37,6 +37,7 @@ import { ProfilePage } from './components/profile/ProfilePage.tsx';
 import { AccessDeniedPage } from './components/auth/AccessDeniedPage.tsx';
 import { AuthTestingPanel } from './components/auth/AuthTestingPanel.tsx';
 import { BookingPage } from './components/booking/BookingPage.tsx';
+import { ParcelBookingPage } from './components/parcel/ParcelBookingPage.tsx';
 import { LandingPage } from './components/LandingPage.tsx';
 import { SplashScreen } from './components/auth/SplashScreen.tsx';
 import { useHealth } from './hooks/useHealth.ts';
@@ -158,6 +159,15 @@ export default function App() {
             <SignInPage onNavigate={handleNavigate} />
           ) : (
             <BookingPage onNavigate={handleNavigate} />
+          )
+        )}
+
+        {/* Protected Parcel Booking Route */}
+        {currentRoute === 'book-parcel' && (
+          !isAuthenticated ? (
+            <SignInPage onNavigate={handleNavigate} />
+          ) : (
+            <ParcelBookingPage onNavigate={handleNavigate} />
           )
         )}
 

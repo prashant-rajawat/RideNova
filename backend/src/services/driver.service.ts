@@ -244,14 +244,11 @@ export const driverService = {
       // Driver attempting to go offline:
       // Prevent drivers from switching to Offline while they have an accepted or active on-demand trip.
       // Drivers may go Offline when they have only future scheduled rides, provided they remain assigned to those bookings.
-      const activeRide = await rideRepository.findActiveRideForDriver(driver.id);
-      if (activeRide) {
-        const onDemandStatuses: RideStatus[] = ['accepted', 'driver_arriving', 'driver_arrived', 'ride_started'];
-        if (onDemandStatuses.includes(activeRide.status)) {
-          throw new ValidationError(
-            'Cannot switch to offline while you have an active on-demand trip in progress. Please complete or cancel this trip first.'
-          );
-        }
+      const activeOnDemandRide = await rideRepository.findActiveOnDemandRideForDriver(driver.id);
+      if (activeOnDemandRide) {
+        throw new ValidationError(
+          'Cannot switch to offline while you have an active on-demand trip in progress. Please complete or cancel this trip first.'
+        );
       }
     }
 
@@ -355,7 +352,7 @@ export const driverService = {
     }
 
     // 2. Prevent Multiple Concurrent Active Rides
-    const activeRide = await rideRepository.findActiveRideForDriver(driver.id);
+    const activeRide = await rideRepository.findActiveOnDemandRideForDriver(driver.id);
     if (activeRide) {
       throw new ConflictError('You already have an active ride in progress. Complete or cancel it first.');
     }
@@ -403,6 +400,16 @@ export const driverService = {
     cancellationReason?: string
   ): Promise<RideWithStops> {
     const driver = await driverRepository.findOrCreate(userId);
+
+    // Security check: Starting a trip requires mandatory OTP verification via verify-otp endpoint!
+    if (newStatus === 'ride_started') {
+      const currentRide = await rideRepository.findById(rideId);
+      if (!currentRide || !currentRide.otp_verified) {
+        throw new ValidationError(
+          'Starting a trip requires mandatory passenger OTP verification. Please verify the 4-digit code provided by the passenger via the verify-otp endpoint.'
+        );
+      }
+    }
 
     const updated = await rideRepository.updateRideStatus(
       rideId,

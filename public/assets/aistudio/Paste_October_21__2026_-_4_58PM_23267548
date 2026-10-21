@@ -1,0 +1,1119 @@
+# RIDENOVA — SCHEDULED ADVANCE RIDE BOOKING SYSTEM
+## Complete Production-Ready Master Implementation Prompt
+
+### PRIMARY OBJECTIVE
+
+Implement a complete, production-oriented Scheduled Advance Booking system in my existing RideNova application. This must be a real, fully connected feature across the customer frontend, driver frontend, admin dashboard, backend APIs, PostgreSQL/Supabase database, payment gateway, notifications, scheduling engine, and ride lifecycle.
+
+This is not a design-only task. Do not merely add a new card, modal, mock data, buttons, endpoints, or backend functions that are not connected to the actual frontend. Implement the complete end-to-end workflow, including the UI/UX, database persistence, server-side authorization, payment verification, driver assignment, notifications, scheduled execution, cancellation rules, and final payment reconciliation.
+
+The existing application supports immediate/live ride bookings. Preserve that working functionality and introduce scheduled bookings as a separate, properly integrated booking mode.
+
+The final experience must look premium, consistent, trustworthy, responsive, and suitable for a real ride-booking platform.
+
+---
+
+# SECTION A — EXISTING APPLICATION AND IMPLEMENTATION RULES
+
+## A1. Inspect the Existing Project First
+
+Before editing files, inspect the actual codebase and identify:
+
+- The existing frontend framework and application entry points.
+- Customer booking pages, booking confirmation pages, ride history, active ride screens, and notification components.
+- Driver dashboard, ride requests, active trip console, earnings, and availability controls.
+- Admin dashboard, driver approval workflows, ride management, and payment verification features.
+- Existing Express routes, controllers, services, repositories, authentication middleware, and error handling.
+- PostgreSQL/Supabase database schema, migration runner, and existing ride/payment tables.
+- Existing Stripe integration, webhook handlers, payment records, and refund handling.
+- Existing Clerk authentication and role-resolution logic.
+- Google Maps address validation, route calculation, and service-area restrictions.
+- Existing realtime subscriptions, polling, and notification delivery.
+- Existing ride cancellation, incentive, OTP, and driver commission calculations.
+
+Reuse existing implementations wherever appropriate. Do not create duplicate payment services, competing ride tables, duplicate notification systems, or a second independent booking lifecycle.
+
+If a required component already exists, extend it instead of replacing it unnecessarily.
+
+## A2. Preserve Existing RideNova Functionality
+
+Keep existing live booking, ride cancellation, five-minute live-request timeout, real-time driver acceptance updates, customer driver details, trip OTP verification, service-area validation, and existing authentication.
+
+The five-minute timeout must remain applicable to immediate/on-demand ride requests according to their current rules. Do not apply that timeout to scheduled advance bookings.
+
+Keep the existing white, red, and black visual identity:
+
+- White: #FFFFFF
+- Primary red: #E21D2B
+- Dark red: #BE1622
+- Main text: #171717
+- Secondary text: #737373
+- Borders: #E5E5E5
+- Soft red backgrounds: #FFF1F2
+
+Maintain a premium visual hierarchy, clear status badges, readable typography, consistent icons, useful loading states, accessible controls, and responsive layouts.
+
+Do not introduce fake bookings, fake drivers, fake payment confirmations, fake earnings, or hardcoded success responses.
+
+## A3. Mandatory Implementation Standard
+
+Make changes in both frontend and backend wherever required.
+
+Every new button must perform a real action. Every displayed booking status must come from persisted server data. Every payment status must come from verified payment processing. Every driver assignment must refer to a real authenticated driver.
+
+Do not report success just because a component compiles or an API endpoint exists. Verify the complete user journey.
+
+If a required external service or environment variable is missing, implement the appropriate integration and report the missing configuration honestly. Never simulate a successful payment to make a test or screen appear complete.
+
+---
+
+# SECTION B — SCHEDULED BOOKING PRODUCT RULES
+
+## B1. Booking Horizon
+
+Allow customers to schedule a ride up to 90 calendar days in advance.
+
+Use the application’s configured operating timezone, initially Asia/Kolkata for the Vadodara service area. Store timestamps in UTC in the database and convert them correctly for display and scheduling.
+
+The customer must choose:
+
+- Pickup date.
+- Pickup time.
+- Pickup location.
+- Optional intermediate stops, if supported by the existing booking flow.
+- Destination.
+- Vehicle category.
+- Passenger count, if applicable.
+- Relevant luggage or accessibility preferences, if supported.
+- Contact details from the authenticated profile.
+- Any existing optional ride preferences.
+
+Reject dates in the past, invalid times, dates beyond the 90-day horizon, and bookings that violate existing operating-area or vehicle-category rules.
+
+Use server-side time validation. Do not trust the browser clock.
+
+Provide a configurable minimum advance-notice period so the platform can avoid accepting a booking that starts too soon to process safely. Configure an initial default of two hours before pickup, but keep it adjustable by authorised administrators. If the current operational rules require a different notice period, use the existing configuration rather than duplicating it.
+
+Show the earliest permitted pickup time and the latest permitted booking date clearly in the UI.
+
+## B2. Keep Immediate and Scheduled Booking Separate
+
+Provide a clear booking-mode selector:
+
+- Ride Now.
+- Schedule a Ride.
+
+Ride Now must continue using the existing immediate booking workflow.
+
+Schedule a Ride must enter the scheduled-booking workflow and use its separate payment-review and driver-assignment stages.
+
+Do not treat a scheduled ride as an ordinary live ride with a future date added to the record.
+
+Use a shared ride lifecycle where practical, but add explicit scheduled-booking states and rules so the system can distinguish an advance booking awaiting payment verification from a live ride searching for a driver.
+
+---
+
+# SECTION C — CUSTOMER SCHEDULED BOOKING EXPERIENCE
+
+## C1. Booking Entry Point
+
+Add a visible Schedule a Ride option to the existing customer booking interface.
+
+Use the existing RideNova design system. Make the booking mode easy to understand, with a calendar/clock icon and concise explanatory text.
+
+The scheduled-booking page or modal must have a clear step-by-step flow:
+
+1. Select route.
+2. Select pickup date and time.
+3. Select vehicle category.
+4. Review estimated fare and advance amount.
+5. Review booking and cancellation terms.
+6. Complete online advance payment.
+7. Submit the booking for admin payment verification.
+8. Track payment verification and subsequent driver assignment.
+
+Show the current step and allow users to return to previous steps without losing valid entered data.
+
+On mobile, use a compact, scrollable layout with full-width inputs and clearly visible primary actions. On desktop, use a structured booking panel with a route summary and booking details.
+
+## C2. Date and Time Picker
+
+Create a polished date picker that allows dates from the configured minimum notice time up to 90 days in advance.
+
+Display dates in a human-readable format, for example:
+
+Friday, 20 November 2026
+
+Provide a time picker with sensible intervals, initially 15 minutes. Prevent invalid or past pickup times.
+
+Show the pickup time in the user’s local configured service timezone and clearly identify the timezone when necessary.
+
+The selected date and time must persist when the customer moves between booking steps.
+
+Validate date and time again on the backend when the booking is created and when payment verification or assignment changes occur.
+
+## C3. Route and Service-Area Validation
+
+Reuse the existing Google Maps route, address resolution, and service-area validation.
+
+Every pickup, stop, and destination must satisfy the configured RideNova service-area rules.
+
+Initially, only supported locations within the configured Vadodara service area should be bookable. Do not allow the 90-day booking feature to bypass geographic restrictions.
+
+Calculate route distance and estimated duration using the existing trusted routing implementation. Calculate the fare using the established server-side fare engine.
+
+Do not accept a customer-supplied fare or an unverified distance as authoritative.
+
+If an address is invalid or outside the supported service area, block submission and display a clear error.
+
+## C4. Fare Summary
+
+Before payment, display a detailed fare estimate containing:
+
+- Selected vehicle category.
+- Pickup and destination.
+- Intermediate stops, if applicable.
+- Scheduled pickup date and time.
+- Estimated distance.
+- Estimated duration.
+- Estimated total fare.
+- Advance payment amount.
+- Remaining estimated balance.
+- Any applicable scheduled-booking fee.
+- Cancellation or refund conditions.
+
+Clearly distinguish the estimated fare from the final fare. If the fare policy allows adjustments, explain when and how they can occur.
+
+The advance amount and balance must be calculated by the backend. The frontend must display the authoritative response.
+
+Do not apply arbitrary fare changes or silently alter the fare after the customer has paid.
+
+If the fare changes materially before admin approval, return the booking for customer confirmation or refund according to the configured policy. Do not charge an additional amount without explicit customer authorization.
+
+---
+
+# SECTION D — ADVANCE PAYMENT POLICY
+
+## D1. Online-Only Advance Payment
+
+Scheduled advance bookings must require an online advance payment before the booking can be submitted for admin review.
+
+Do not offer cash as a method for the advance amount.
+
+Reuse the existing Stripe integration if it is already implemented. If the project uses a different established online payment provider, extend the existing provider architecture rather than introducing a competing payment system.
+
+Use the provider’s supported hosted checkout or secure payment flow. Never collect or store raw card details in RideNova.
+
+Do not treat a payment screenshot, UPI transaction reference, frontend redirect, or customer-submitted transaction ID as proof that the platform received money.
+
+The authoritative advance-payment result must come from a verified provider response or signed webhook, using the existing payment architecture.
+
+## D2. Configurable Advance Amount
+
+Implement a configurable advance-payment policy. Do not hardcode the advance amount separately across multiple frontend components.
+
+Initially, use a configurable percentage of the estimated fare, with a proposed default of 20%. Make the percentage and minimum/maximum advance amounts adjustable by an authorised administrator.
+
+For example, if the estimated fare is ₹2,000 and the configured advance is 20%, the advance is ₹400 and the estimated remaining balance is ₹1,600.
+
+This is an example only. The real values must be calculated from the server’s current configuration and fare calculation.
+
+Validate currency units carefully. If the payment provider requires amounts in the smallest currency unit, convert and round correctly. Prevent floating-point precision errors and duplicate charges.
+
+Show the exact amount before the customer confirms payment.
+
+## D3. Payment Attempt and Retry
+
+Create a payment attempt associated with the scheduled booking and authenticated customer.
+
+Support:
+
+- Payment pending.
+- Payment processing.
+- Payment succeeded.
+- Payment failed.
+- Payment cancelled or abandoned.
+- Payment expired, where supported.
+- Refund pending.
+- Partially refunded.
+- Fully refunded.
+
+Allow a safe retry after a failed or abandoned payment. Reuse the same unpaid booking where appropriate rather than creating duplicate bookings for every retry.
+
+Use idempotency keys for payment creation and protect against repeated button clicks, duplicate requests, webhook retries, and browser refreshes.
+
+A payment success page must not independently mark a payment as successful. Verify the persisted payment status from the backend.
+
+## D4. Payment Confirmation UI
+
+After the provider confirms payment, show a clear receipt containing:
+
+- Booking reference.
+- Payment reference.
+- Amount paid.
+- Payment status.
+- Booking status.
+- Selected pickup date and time.
+- A message explaining that admin verification is still pending.
+
+Use wording such as:
+
+“Advance payment received. Your scheduled booking is awaiting admin verification. Your ride will not be offered to drivers until the payment has been verified and the booking approved.”
+
+Do not show “Driver Assigned” or “Booking Confirmed” prematurely.
+
+---
+
+# SECTION E — CUSTOMER PAYMENT PROOF AND REFERENCE
+
+## E1. Keep Payment Proof Distinct from Payment Confirmation
+
+If the existing business workflow requires a customer to upload a payment receipt or provide a transaction reference, implement this as supporting evidence only.
+
+When the selected online payment provider already verifies the payment directly, the provider’s verified transaction remains authoritative. A screenshot must never replace provider verification.
+
+If an administrator needs a reference for reconciliation, display the provider’s transaction or payment reference from the persisted payment record. Do not ask the customer to invent or re-enter a reference that the provider has already supplied.
+
+If the existing payment method legitimately requires manual review, allow a reference and proof upload through a clearly labelled, secure workflow. Do not represent this as automatic provider confirmation.
+
+## E2. Secure Proof Uploads
+
+If a proof image is required by the configured workflow:
+
+- Accept only supported image formats.
+- Validate file type and file size on the backend.
+- Store files in a private storage location.
+- Use access-controlled signed URLs or equivalent protected access.
+- Associate the file with the booking, payment attempt, and authenticated customer.
+- Prevent unauthorised users from reading or replacing the file.
+- Record the upload time and uploader.
+- Allow an authorised administrator to review the evidence.
+- Avoid logging sensitive payment information.
+
+Provide upload progress, preview, retry, remove-before-submission, and clear error states.
+
+If a verified Stripe payment is used and no additional manual proof is necessary, do not force the customer to upload a redundant screenshot just to complete checkout.
+
+---
+
+# SECTION F — ADMIN PAYMENT REVIEW AND BOOKING APPROVAL
+
+## F1. Dedicated Scheduled Booking Queue
+
+Add a dedicated Scheduled Bookings section to the existing admin dashboard.
+
+The page must show real persisted records, not hardcoded demo bookings.
+
+Include filters for:
+
+- Awaiting payment.
+- Payment received, awaiting review.
+- Approved and awaiting driver assignment.
+- Driver assigned.
+- Upcoming pickup.
+- In progress.
+- Completed.
+- Cancelled.
+- Refund pending or completed.
+- Rejected or expired.
+
+Each booking row or card should show the booking reference, customer, pickup date and time, route summary, vehicle category, estimated fare, advance amount, payment status, and booking status.
+
+Provide search by booking reference and customer details where permitted.
+
+Use pagination for large result sets. Enforce admin authorization on the backend.
+
+## F2. Admin Verification Workflow
+
+After the online payment has been successfully verified by the payment provider, move the booking into a state such as PAYMENT_RECEIVED_PENDING_ADMIN_REVIEW.
+
+The admin can inspect the booking and its payment record.
+
+Provide these actions:
+
+- Approve Booking.
+- Reject Booking.
+- Request Clarification, if manual proof is part of the configured workflow.
+- View Payment Details.
+- View Receipt or Proof, if available.
+- View Audit History.
+
+Approval must require an authenticated, authorized administrator.
+
+On approval, persist the reviewer’s identity, decision, timestamp, and any reason or note.
+
+If an admin rejects a booking after the customer has paid, start the configured refund workflow. Do not mark the refund complete until the payment provider confirms it.
+
+A failed refund must remain visible and retryable by authorised staff. Never silently discard a refund failure.
+
+## F3. Separation of Responsibilities
+
+Payment verification and booking approval must be represented clearly.
+
+Where payment-provider verification is automatic, the provider webhook confirms that the advance payment was received. The administrator then approves the booking for dispatch according to the platform’s operational policy.
+
+If the provider has not confirmed payment, the booking cannot enter the driver-dispatch queue.
+
+An administrator must not be able to mark a real provider payment as successfully received merely by changing a UI badge. Any administrative exception must use a separate, permission-controlled, audited reconciliation workflow.
+
+---
+
+# SECTION G — DRIVER REQUESTS AND ACCEPTANCE
+
+## G1. Only Approved Bookings Reach Drivers
+
+A scheduled booking must not be visible to drivers until:
+
+1. The online advance payment has been verified.
+2. The administrator has approved the booking.
+3. The booking is valid and not cancelled or refunded.
+4. The pickup time remains eligible for assignment.
+5. The booking satisfies service-area and driver eligibility rules.
+
+Use a state such as APPROVED_AWAITING_DRIVER only after the required checks pass.
+
+Do not broadcast pending, unpaid, rejected, or unapproved bookings to driver dashboards.
+
+## G2. Scheduled Requests UI
+
+Add a Scheduled Requests section to the driver dashboard, separate from immediate ride requests.
+
+For every eligible scheduled request, display:
+
+- Booking reference.
+- Pickup date and time.
+- Time remaining until pickup.
+- Pickup location.
+- Intermediate stops, if any.
+- Destination.
+- Vehicle category.
+- Estimated distance and duration.
+- Estimated fare.
+- Relevant driver earnings estimate.
+- Advance-payment-received status.
+- Any additional scheduled-ride requirements.
+
+Do not expose customer payment screenshots, full payment credentials, or unnecessary sensitive payment details to drivers.
+
+A driver may see a clear status such as:
+
+“Advance payment verified by RideNova.”
+
+Do not imply that the driver personally received the advance payment. The platform received it.
+
+## G3. Driver Acceptance
+
+Allow an eligible driver to accept a scheduled booking only when the driver is approved, has valid vehicle/KYC status, and satisfies existing driver eligibility rules.
+
+Use an atomic backend operation to prevent two drivers from accepting the same booking.
+
+When a driver accepts successfully:
+
+- Persist the driver assignment.
+- Record acceptance time.
+- Update the booking status.
+- Notify the customer.
+- Notify the driver with confirmation.
+- Update the admin view.
+- Publish a real-time event or trigger the existing refresh/polling mechanism.
+
+If another driver has already accepted, show a clear “This booking has already been assigned” message.
+
+Do not claim success if the server rejects the assignment.
+
+## G4. Scheduled Driver Availability
+
+A driver may accept a future scheduled booking without being forced to remain online continuously for the entire waiting period, provided this is compatible with existing operational rules.
+
+However, enforce the existing restriction that a driver cannot go offline during an active on-demand trip.
+
+Keep future scheduled commitments separate from an active trip. Show accepted future bookings in the driver’s schedule with enough detail to prevent overlapping assignments.
+
+Prevent a driver from accepting two bookings with conflicting pickup times, considering configured travel time, estimated duration, buffer time, and the current trip state.
+
+Make the conflict check server-authoritative and perform it atomically with assignment.
+
+---
+
+# SECTION H — SCHEDULING ENGINE AND AUTOMATIC DISPATCH
+
+## H1. Reliable Background Processing
+
+Implement a reliable server-side scheduling mechanism for future pickups.
+
+Do not rely exclusively on an open browser tab, a frontend timer, or a driver keeping the dashboard open.
+
+Use the project’s existing job runner if available. Otherwise, implement a reliable database-backed scheduler or background worker appropriate for the deployment environment.
+
+The scheduler must:
+
+- Find approved scheduled bookings approaching their pickup time.
+- Confirm that the booking is still valid.
+- Confirm that it has not been cancelled, refunded, or completed.
+- Check that an assigned driver is still eligible.
+- Trigger assignment or dispatch according to the configured policy.
+- Notify the customer and driver when action is required.
+- Record job execution and errors.
+- Retry recoverable failures safely.
+- Avoid duplicate notifications or duplicate dispatch operations.
+- Recover overdue jobs after a server restart or deployment.
+
+Make the scheduling logic idempotent. Running a job twice must not create duplicate assignments or alter a completed booking.
+
+## H2. Configurable Dispatch Window
+
+Implement a configurable dispatch window before pickup. Use a proposed initial default of 60 minutes before the scheduled pickup time, adjustable by authorised administrators.
+
+If the customer books within the minimum advance-notice period, apply the same eligibility rules without creating an impossible or expired dispatch window.
+
+Use the dispatch window to begin targeted driver assignment and notify eligible drivers. The booking may be assigned earlier if the platform’s policy permits and an eligible driver accepts.
+
+Do not promise guaranteed driver arrival simply because the customer has paid or the admin has approved the booking.
+
+Use honest UI language such as “Approved — finding a driver” or “Driver assigned.” If no driver is available, show the real status and provide a support or cancellation path.
+
+## H3. No Five-Minute Live-Ride Timeout
+
+Scheduled bookings must not automatically cancel five minutes after the request is submitted.
+
+Keep the existing five-minute timeout for live/on-demand requests only.
+
+Scheduled bookings use their scheduled pickup time, payment-review deadline, cancellation rules, and dispatch policy.
+
+If payment is never completed, expire the unpaid booking according to a configurable payment-session expiry policy. Do not confuse payment expiry with pickup time or the live ride timeout.
+
+If admin review is delayed beyond a configurable deadline, alert the admin and show the customer that review is pending. Do not falsely label the booking as confirmed.
+
+---
+
+# SECTION I — CUSTOMER TRACKING, DETAILS, AND NOTIFICATIONS
+
+## I1. Scheduled Booking Detail Page
+
+Every customer must be able to reopen a scheduled booking’s complete details from the dashboard, booking history, and notifications.
+
+Add a persistent “View Details” action.
+
+The detail page must show:
+
+- Booking reference.
+- Booking status and payment status.
+- Pickup date and time.
+- Pickup address.
+- Stops.
+- Destination.
+- Vehicle category.
+- Estimated distance and duration.
+- Estimated fare.
+- Advance paid.
+- Remaining estimated balance.
+- Payment receipt and provider reference.
+- Cancellation eligibility and refund status.
+- Assigned driver’s name and permitted contact information, when assigned.
+- Driver vehicle make/model and registration number, when assigned.
+- Driver arrival or trip progress, where supported.
+- Pickup OTP when the booking is ready for pickup, subject to the existing secure OTP design.
+- Relevant booking and status-change history.
+
+The page must load from persisted server data so refreshing, signing out and signing back in, or opening another device does not erase booking details.
+
+Do not expose driver private information before assignment or beyond the platform’s permitted contact policy.
+
+## I2. Real-Time Updates
+
+Reuse the existing RideNova realtime subscription system and polling fallback.
+
+When a scheduled booking changes status, update the customer interface without requiring a manual refresh.
+
+Examples:
+
+- Advance payment received.
+- Awaiting admin review.
+- Booking approved.
+- Driver assignment started.
+- Driver assigned.
+- Driver en route.
+- Driver arrived at pickup.
+- Trip started.
+- Trip completed.
+- Booking cancelled.
+- Refund initiated or completed.
+
+Use clear visual status transitions, concise messages, and appropriate toast or modal notifications. Avoid repeatedly showing the same popup after reconnecting.
+
+If realtime delivery fails, the page must recover by fetching current booking data from the backend.
+
+## I3. Notification Channels
+
+Integrate with the existing in-app notification system.
+
+Where configured, send email or push notifications for important milestones.
+
+Provide notifications for:
+
+- Payment confirmation.
+- Admin approval or rejection.
+- Driver assignment.
+- Driver cancellation or reassignment.
+- Pickup reminders.
+- Changes to pickup time.
+- Cancellation and refund updates.
+
+Persist notification records. Mark notifications read only when the user performs the relevant action, and do not recreate read notifications during profile sync, server restart, or deployment.
+
+Do not report an email or push message as delivered unless the relevant provider confirms the delivery state.
+
+---
+
+# SECTION J — DRIVER ARRIVAL, OTP, AND TRIP EXECUTION
+
+## J1. Reuse the Existing OTP System
+
+Scheduled rides must use the existing secure trip-start OTP architecture where available.
+
+Generate or activate the pickup OTP according to the existing backend policy. The OTP must be associated with the correct booking and remain unavailable to unrelated customers or drivers.
+
+Display the OTP to the authenticated customer in the scheduled booking detail page when the pickup verification stage is reached.
+
+Allow the assigned driver to enter the OTP into a visible verification form in the active trip console.
+
+The driver must not be able to start the trip unless the backend verifies the correct OTP for that specific booking.
+
+Do not accept a client-side-only comparison.
+
+## J2. OTP Security
+
+- Use a cryptographically secure random generator.
+- Validate the OTP on the backend.
+- Enforce a limited number of attempts.
+- Rate-limit repeated incorrect attempts.
+- Prevent an OTP from being reused for another booking.
+- Expire or invalidate it according to the existing trip policy.
+- Never log the OTP in production logs.
+- Do not include it in public driver-request lists.
+- Return a clear error for an incorrect, expired, or already-used OTP.
+- Persist the verified state so refreshing the page does not reset it.
+
+If the OTP is missing or cannot be validated, show a recoverable error and do not start the trip.
+
+## J3. Existing Trip Lifecycle
+
+After successful pickup verification, continue the existing trip lifecycle:
+
+ACCEPTED → EN_ROUTE_TO_PICKUP → ARRIVED_AT_PICKUP → IN_PROGRESS → COMPLETED
+
+Use the existing status names if they differ, but map the lifecycle consistently.
+
+Only the assigned driver may update driver-controlled trip stages. The backend must validate legal status transitions.
+
+Do not trigger final payment automatically merely because the driver arrives at the destination. Use the established ride-completion and payment workflow.
+
+---
+
+# SECTION K — REMAINING FARE AND COMMISSION
+
+## K1. Advance Payment Is Not the Entire Fare
+
+Maintain a clear distinction between:
+
+- Estimated total fare.
+- Verified advance payment received by the platform.
+- Final fare.
+- Remaining amount due.
+- Driver earnings.
+- Platform commission.
+- Refunds and adjustments.
+
+The advance payment is credited toward the final fare according to the configured payment policy. It must not be counted twice.
+
+For example, if the final fare is ₹2,000 and the verified advance is ₹400, the remaining amount is ₹1,600, subject to the platform’s final fare policy.
+
+The actual amounts must be calculated from persisted payment and fare records, not frontend arithmetic.
+
+## K2. Final Fare Settlement
+
+At trip completion, calculate the final fare using the existing trusted pricing engine and permitted adjustments.
+
+Display a final settlement summary to the customer:
+
+- Final fare.
+- Advance already paid.
+- Remaining balance.
+- Available payment methods for the remaining balance.
+- Payment status and receipt.
+
+The remaining fare may follow the existing supported payment methods, including online payment or cash if the platform permits it.
+
+The advance portion must remain online-only. Do not let a driver mark an unpaid advance as received in cash.
+
+If the customer disputes the final fare or a payment fails, preserve the ride and payment records and provide a clear retry/support workflow.
+
+## K3. Driver Earnings and Platform Commission
+
+Reuse the existing commission and driver-earnings rules.
+
+Calculate driver earnings from the applicable final fare and established commission policy. Do not treat the entire advance payment as an extra driver payment.
+
+Ensure that the platform’s commission is not deducted twice and that the driver does not receive duplicate earnings when a payment webhook or trip-completion request is retried.
+
+Do not mark driver earnings as paid or a payout as completed unless the existing payout system confirms it.
+
+---
+
+# SECTION L — CANCELLATION, REASSIGNMENT, AND REFUNDS
+
+## L1. Customer Cancellation
+
+Provide a visible cancellation action in the scheduled booking details whenever cancellation is allowed.
+
+Before confirming cancellation, show:
+
+- The booking status.
+- Whether the cancellation is permitted.
+- Any applicable cancellation fee.
+- The expected refund amount.
+- The expected refund method and status.
+- Any applicable non-refundable fees.
+
+Use a confirmation dialog so the customer does not cancel accidentally.
+
+The backend must recheck cancellation eligibility when processing the request.
+
+Prevent cancellation of a completed booking. Apply the configured policy for bookings that are already in progress or near pickup.
+
+## L2. Driver Cancellation
+
+Allow driver cancellation or withdrawal only according to the existing driver-discretion and operational policies.
+
+Record a cancellation reason and timestamp.
+
+Notify the customer and admin. Reopen driver assignment if the booking is still valid and enough time remains before pickup.
+
+Do not allow a driver to cancel a booking and leave the customer’s interface stuck on “Driver assigned.”
+
+Prevent duplicate assignments during reassignment.
+
+## L3. Refund Rules
+
+Create a configurable refund policy that authorised administrators can adjust.
+
+Refund decisions should depend on booking state, cancellation timing, applicable fees, and whether the platform or customer initiated cancellation.
+
+Use the payment provider’s real refund API where supported.
+
+Track refund requests and provider references. Update the status only after verified provider responses or webhooks.
+
+Support refund pending, refund failed, partially refunded, and fully refunded states as appropriate.
+
+Do not delete a payment record after a refund. Preserve the complete payment and refund audit trail.
+
+Never claim that money has been refunded merely because a refund request was created.
+
+---
+
+# SECTION M — ADMIN DASHBOARD AND OPERATIONAL CONTROLS
+
+Create a premium Scheduled Bookings administration interface integrated with the existing admin dashboard.
+
+Provide the following operational views:
+
+1. Pending payment verification or reconciliation.
+2. Awaiting booking approval.
+3. Approved and awaiting driver.
+4. Assigned upcoming rides.
+5. Bookings approaching pickup.
+6. In-progress scheduled rides.
+7. Completed bookings.
+8. Cancelled bookings and refund cases.
+9. Failed payment or refund cases.
+
+Show real database values only.
+
+Include booking details, customer information permitted by the existing privacy rules, payment references, pickup schedule, driver assignment, route, fare summary, and audit history.
+
+Provide authorised actions for approval, rejection, refund initiation, and reassignment, with confirmation dialogs and required reasons where appropriate.
+
+Use server-side role and permission checks for every administrative API. Hiding a button in the frontend is not authorization.
+
+Add configurable operational settings for:
+
+- Maximum booking horizon, initially 90 days.
+- Minimum advance notice.
+- Advance-payment percentage and allowed bounds.
+- Minimum and maximum advance amount.
+- Dispatch window.
+- Payment-review deadline.
+- Cancellation/refund policy.
+- Supported service area, using the existing configuration.
+
+Validate all settings on the backend. Do not allow an admin setting to create invalid payment amounts, impossible scheduling windows, or unsupported service-area rules.
+
+---
+
+# SECTION N — DATABASE DESIGN AND MIGRATIONS
+
+Inspect the existing database schema before making changes.
+
+Extend existing ride, payment, and notification records when appropriate. Add dedicated scheduled-booking records only if the current schema cannot safely represent the required workflow.
+
+Use additive, backward-compatible migrations.
+
+Potential fields, adapted to the existing schema, may include:
+
+- Booking mode.
+- Scheduled pickup timestamp.
+- Booking timezone.
+- Advance-payment amount.
+- Advance-payment status.
+- Admin-review status.
+- Reviewed-by admin ID.
+- Review timestamp and notes.
+- Dispatch-window timestamp.
+- Assignment status.
+- Assigned driver ID.
+- Payment-provider reference.
+- Final fare and remaining balance.
+- Cancellation reason and timestamp.
+- Refund amount and status.
+- Created, updated, and lifecycle timestamps.
+
+Use appropriate foreign keys, unique constraints, indexes, and database transactions.
+
+Add indexes for upcoming bookings, payment-review queues, driver assignment, and status filtering.
+
+Ensure that concurrent acceptance attempts cannot assign the same booking to multiple drivers.
+
+Preserve all existing production records. Do not drop or recreate the rides, users, drivers, payments, or notifications tables.
+
+Do not rerun destructive seed logic on startup. Do not reset existing driver approval states or customer notification-read states.
+
+The migration must be safe to run through the existing migration runner and must not silently mark a migration as applied when its SQL failed.
+
+If production database access is unavailable, create the migration and document the exact deployment step. Do not claim it was executed.
+
+---
+
+# SECTION O — API, AUTHORIZATION, AND SECURITY
+
+Implement or extend the existing APIs using the project’s current route/controller/service/repository architecture.
+
+The exact routes should follow existing naming conventions. Potential operations include:
+
+- Create scheduled booking.
+- Retrieve customer scheduled bookings.
+- Retrieve a single booking’s details.
+- Initiate advance payment.
+- Retrieve payment status.
+- Submit a booking for review.
+- Approve or reject a booking as an admin.
+- List eligible scheduled requests for a driver.
+- Accept a scheduled booking.
+- Cancel a scheduled booking.
+- Update an eligible trip status.
+- Verify pickup OTP.
+- Calculate final fare and settle remaining payment.
+- Initiate and inspect refunds.
+- Update authorised scheduling/payment configuration.
+
+Enforce authentication and authorization on the backend.
+
+A customer may only view or change their own bookings, subject to the cancellation and lifecycle rules.
+
+A driver may only view permitted requests and details, and may only operate on bookings assigned to them or eligible for acceptance.
+
+Only authorized administrators may approve bookings, access administrative queues, modify operational settings, or initiate restricted reconciliation actions.
+
+Validate every request body, ID, date, amount, status transition, and payment reference.
+
+Use transactions and idempotency for operations that may be retried.
+
+Return structured, useful error responses. Do not expose stack traces, secrets, private payment details, or internal database errors to users.
+
+Never trust a frontend-supplied user ID, role, fare, commission, payment status, or approval flag.
+
+---
+
+# SECTION P — REALTIME, CONCURRENCY, AND RELIABILITY
+
+Use the existing realtime mechanism where possible.
+
+When the payment is verified, the admin approves the booking, a driver accepts it, or the ride status changes, update all relevant views without requiring manual refresh.
+
+If the realtime connection is unavailable, use a reasonable polling fallback with cleanup and backoff. Avoid uncontrolled high-frequency requests.
+
+Handle:
+
+- Duplicate webhook deliveries.
+- Browser refreshes.
+- Multiple tabs.
+- Repeated booking submissions.
+- Simultaneous driver acceptance.
+- Network loss during payment.
+- Network loss during cancellation.
+- Server restarts.
+- Deployment during scheduled processing.
+- Late scheduler execution.
+- A driver becoming unavailable.
+- Payment success arriving after a browser session closes.
+
+The database must remain the source of truth.
+
+Persist the booking before initiating external operations when appropriate, and use safe transaction boundaries. Do not hold a database transaction open while waiting for a user or external payment gateway.
+
+Use outbox/job patterns or equivalent reliable mechanisms where necessary to ensure that state changes and follow-up notifications are not silently lost.
+
+Do not allow a stale frontend screen to overwrite a newer server state.
+
+---
+
+# SECTION Q — PREMIUM CUSTOMER UI/UX
+
+Implement a complete premium experience for the customer.
+
+### Booking Screen
+
+Include:
+- Ride Now / Schedule a Ride selector.
+- Date and time selection.
+- Pickup, stops, and destination.
+- Vehicle category.
+- Route and distance.
+- Estimated fare.
+- Advance amount.
+- Estimated remaining balance.
+- Cancellation policy.
+- Clear payment CTA.
+
+### Payment Screen
+
+Include:
+- Exact advance amount.
+- Secure online payment option.
+- Payment processing state.
+- Payment failure and retry.
+- Duplicate-submission protection.
+- Receipt after verified payment.
+
+### Booking Status Screen
+
+Show a clear progress timeline:
+
+BOOKING CREATED → ADVANCE PAYMENT VERIFIED → ADMIN REVIEW → BOOKING APPROVED → FINDING DRIVER → DRIVER ASSIGNED → DRIVER EN ROUTE → ARRIVED AT PICKUP → TRIP STARTED → COMPLETED
+
+Only show stages supported by the actual persisted state. If a booking is rejected or cancelled, show the relevant branch and refund status instead.
+
+### Booking Details
+
+Provide a persistent View Details button in the dashboard, booking history, and notifications.
+
+Keep the booking reference easy to copy.
+
+Show the driver, vehicle, pickup OTP, route, fare, advance receipt, and remaining balance only when appropriate for the booking state and privacy rules.
+
+Use clear empty states, loading skeletons, error recovery, success feedback, and confirmation dialogs.
+
+Avoid oversized modals that hide important actions. Ensure that all content is usable on mobile devices and accessible with keyboard navigation.
+
+---
+
+# SECTION R — DRIVER UI/UX
+
+Implement a separate Scheduled Requests view in the driver dashboard.
+
+Provide:
+- Upcoming assigned rides.
+- New eligible scheduled requests.
+- Pickup date and time.
+- Time until pickup.
+- Route and stops.
+- Fare and estimated earnings.
+- Verified advance-payment indicator.
+- Accept action.
+- Booking detail view.
+- Conflict warnings.
+- Upcoming booking reminders.
+- Active trip OTP verification.
+- Trip status controls.
+- Cancellation and reassignment states.
+
+Do not let the driver accidentally confuse a future scheduled ride with an immediate active trip.
+
+Use clear labels such as “Upcoming Scheduled Ride” and “Active Trip.”
+
+When the driver accepts a booking, display a visible confirmation and immediately update the server-backed status.
+
+If the driver cannot accept due to an overlap, invalid eligibility, or another driver already being assigned, show a specific explanation.
+
+Do not allow a driver to mark an advance payment as personally collected when the payment was received by the platform.
+
+---
+
+# SECTION S — NOTIFICATIONS AND REMINDERS
+
+Create persisted, idempotent reminders for customers and assigned drivers.
+
+Support configurable reminder intervals, with proposed initial reminders 24 hours before pickup, 2 hours before pickup, and 30 minutes before pickup where applicable.
+
+Do not send a reminder if the booking has already been cancelled or the relevant stage has changed.
+
+For customers, reminders should include the booking reference, scheduled time, and a View Details action.
+
+For drivers, reminders should include the pickup time, route summary, and the action needed next.
+
+Use the existing in-app notifications and any configured email/push providers.
+
+Track notification status where supported. Do not recreate duplicate notifications when a worker restarts.
+
+Respect notification preferences and applicable privacy requirements.
+
+---
+
+# SECTION T — TESTING AND ACCEPTANCE CRITERIA
+
+Implement and actually execute automated tests using the project’s existing testing framework.
+
+Do not replace real assertions with superficial tests that only check whether a page renders.
+
+### Booking Validation
+
+1. A customer can create a valid scheduled booking within the 90-day horizon.
+2. A booking in the past is rejected.
+3. A booking beyond the configured horizon is rejected.
+4. A booking inside the minimum-notice window is rejected.
+5. Invalid or unsupported pickup, stops, and destination are rejected.
+6. A customer cannot create a booking for another user.
+7. Duplicate submissions do not create duplicate bookings.
+
+### Payment
+
+8. A scheduled booking cannot enter admin review as payment received until the online payment is verified.
+9. An unpaid booking cannot be approved for driver dispatch.
+10. A customer cannot mark their own payment as successful.
+11. Invalid webhook signatures are rejected.
+12. Duplicate webhooks do not duplicate payment or advance balances.
+13. A failed or abandoned payment can be retried safely.
+14. Refund status reflects actual provider confirmation.
+15. The advance is credited exactly once toward the final fare.
+
+### Admin Review
+
+16. An ordinary customer cannot access admin approval APIs.
+17. An ordinary driver cannot approve a booking.
+18. Admin approval persists across refreshes, redeployments, and server restarts.
+19. Rejection after payment triggers the configured refund process.
+20. All administrative decisions create an audit record.
+
+### Driver Assignment
+
+21. Unapproved bookings are not shown to drivers.
+22. Only eligible drivers can accept.
+23. Two simultaneous acceptance attempts result in only one assignment.
+24. Overlapping scheduled commitments are rejected.
+25. Driver acceptance updates customer, driver, and admin views.
+26. A cancelled booking cannot be accepted.
+
+### Scheduling and Trip Lifecycle
+
+27. Scheduled bookings do not expire under the five-minute live-ride timeout.
+28. The scheduler processes an eligible upcoming booking.
+29. Scheduler retries do not create duplicate assignments.
+30. Restarting the backend does not lose pending scheduled jobs.
+31. The correct customer can view their booking details after logging in again.
+32. The assigned driver can verify the pickup OTP.
+33. An incorrect or expired OTP does not start the trip.
+34. A valid OTP permits the legal trip-start transition.
+35. Final fare and remaining balance are correct.
+36. Completed rides cannot be cancelled.
+37. Customer cancellation and driver cancellation follow the configured policy.
+
+### Frontend Integration
+
+38. The Schedule a Ride option is visible and usable.
+39. Date/time selection works on desktop and mobile.
+40. The advance-payment amount matches the backend response.
+41. The admin review queue displays real records.
+42. The driver scheduled-request list displays only eligible bookings.
+43. Customer status updates without requiring a manual refresh, with a polling fallback if realtime fails.
+44. View Details remains accessible from the dashboard and history.
+45. Buttons display loading, success, and error states appropriately.
+46. No fake bookings, fake payment confirmations, or hardcoded successful API responses are used.
+
+Run the available frontend build, backend build, type checks, and test suites. Fix errors caused by the implementation.
+
+If external payment credentials, webhook configuration, or production database access are missing, identify that limitation and provide exact setup steps. Do not claim an external payment or deployment test succeeded if it was not actually performed.
+
+---
+
+# SECTION U — DEPLOYMENT AND ENVIRONMENT CONFIGURATION
+
+Reuse existing deployment conventions and environment variables wherever possible.
+
+Confirm the correct configuration for:
+
+- Backend database connection.
+- Clerk authentication.
+- Payment provider secret key.
+- Payment webhook signing secret.
+- Frontend base URL.
+- Backend API URL.
+- Google Maps API configuration.
+- Scheduler or background worker execution.
+- Email or push notification providers, if configured.
+
+Keep all payment secrets server-side. Never place secret keys in frontend environment variables or expose them to the browser.
+
+Ensure payment webhook routes use the raw request body when required by the payment provider’s signature verification.
+
+Document the correct webhook URL and required events based on the actual payment integration.
+
+Use test mode for initial payment testing. Do not enable live payments until credentials, webhook signatures, refund handling, and the complete lifecycle have been verified.
+
+Ensure the background scheduler runs reliably in the actual hosting environment and is not dependent on an idle frontend session.
+
+Do not print secrets into logs or the final report.
+
+---
+
+# SECTION V — IMPLEMENTATION ORDER
+
+Implement the feature in this order, while completing each step rather than stopping after planning:
+
+1. Inspect the existing application and identify reusable ride, payment, OTP, and notification services.
+2. Design the scheduled-booking states and payment/review transitions.
+3. Implement safe database migrations.
+4. Implement backend validation, scheduling, payment handling, and admin authorization.
+5. Implement the customer scheduling and payment UI.
+6. Implement the admin review and approval UI.
+7. Implement driver scheduled requests and atomic assignment.
+8. Connect realtime updates, notifications, reminders, and View Details.
+9. Connect OTP verification and final fare settlement to the existing trip lifecycle.
+10. Implement cancellation and refund handling.
+11. Run automated tests, builds, and type checks.
+12. Verify the complete customer-to-admin-to-driver-to-completion journey.
+
+Do not stop after step 1, 2, or 3. Continue until the implementation is connected end to end, or clearly document the specific external blocker that prevents completion.
+
+---
+
+# SECTION W — FINAL DELIVERY REPORT
+
+At completion, provide a factual report containing:
+
+1. The exact files changed or added.
+2. Database migrations created and whether they were actually executed.
+3. APIs added or modified.
+4. Customer UI changes.
+5. Driver UI changes.
+6. Admin UI changes.
+7. Payment and webhook behaviour implemented.
+8. Scheduler and reminder implementation.
+9. OTP and final payment integration.
+10. Cancellation and refund behaviour.
+11. Automated tests actually run and their results.
+12. Frontend/backend build and type-check results.
+13. Any missing credentials, external configuration, or deployment steps.
+14. Any incomplete requirements and why they remain incomplete.
+
+Never claim a feature is complete merely because the code was generated or a build passed.
+
+The final acceptance condition is a working, persistent, secure, premium scheduled-booking experience across customer, admin, and driver interfaces, integrated with the existing RideNova platform and preserving all existing live-ride functionality.

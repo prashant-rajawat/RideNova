@@ -967,4 +967,71 @@ export const api = {
   async getAdminDriverProfile(id: string): Promise<{ success: boolean; data: any }> {
     return request(`/admin/drivers/${id}/profile`);
   },
+
+  // --- Parcel Delivery API ---
+  async createParcel(data: any): Promise<{ success: boolean; message: string; data: any }> {
+    return request('/parcels', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  },
+
+  async getParcels(): Promise<{ success: boolean; data: any[]; count: number }> {
+    return request('/parcels');
+  },
+
+  async getParcel(id: string): Promise<{ success: boolean; data: any }> {
+    return request(`/parcels/${id}`);
+  },
+
+  async cancelParcel(id: string, reason?: string): Promise<{ success: boolean; message: string; data: any }> {
+    return request(`/parcels/${id}/cancel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    });
+  },
+
+  async getDriverParcelRequests(): Promise<{ success: boolean; data: any[]; count: number }> {
+    return request('/parcels/driver/requests');
+  },
+
+  async acceptParcel(id: string): Promise<{ success: boolean; message: string; data: any }> {
+    return request(`/parcels/driver/${id}/accept`, {
+      method: 'POST',
+    });
+  },
+
+  async getActiveParcel(): Promise<{ success: boolean; data: any }> {
+    return request('/parcels/driver/active');
+  },
+
+  async verifyPickupOtp(id: string, otp: string, evidenceUrl?: string): Promise<{ success: boolean; message: string; data: any }> {
+    return request(`/parcels/driver/${id}/verify-pickup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ otp, evidenceUrl }),
+    });
+  },
+
+  async updateParcelStatus(id: string, status: string, cancellationReason?: string): Promise<{ success: boolean; message: string; data: any }> {
+    return request(`/parcels/driver/${id}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status, cancellationReason }),
+    });
+  },
+
+  async verifyDeliveryOtp(id: string, otp: string, evidenceUrl?: string): Promise<{ success: boolean; message: string; data: any }> {
+    return request(`/parcels/driver/${id}/verify-delivery`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ otp, evidenceUrl }),
+    });
+  },
+
+  async getAdminParcels(): Promise<{ success: boolean; data: any[]; count: number }> {
+    return request('/parcels/admin/all');
+  },
 };
