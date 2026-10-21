@@ -20,6 +20,7 @@ import { api, ApiError } from '../../lib/api.ts';
 import { useAuthSession } from '../../context/AuthContext.tsx';
 import { ParcelTracker } from './ParcelTracker.tsx';
 import { isWithinServiceArea } from '../../utils/serviceArea.ts';
+import { ServiceAreaAlert } from '../booking/ServiceAreaAlert.tsx';
 
 interface ParcelBookingPageProps {
   onNavigate: (route: string) => void;
@@ -199,10 +200,14 @@ export const ParcelBookingPage: React.FC<ParcelBookingPageProps> = ({ onNavigate
 
       {/* Error Banner */}
       {errorMessage && (
-        <div className="p-3.5 rounded-xl bg-[#FFF1F2] border border-[#E21D2B]/30 text-xs text-[#E21D2B] flex items-center gap-2">
-          <AlertCircle className="h-4 w-4 shrink-0" />
-          <span>{errorMessage}</span>
-        </div>
+        errorMessage.includes('outside our current service area') ? (
+          <ServiceAreaAlert message={errorMessage} />
+        ) : (
+          <div className="p-3.5 rounded-xl bg-[#FFF1F2] border border-[#E21D2B]/30 text-xs text-[#E21D2B] flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+        )
       )}
 
       {/* STEP 1: PARCEL DETAILS & PHOTOS */}

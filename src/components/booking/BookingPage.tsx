@@ -21,6 +21,7 @@ import {
   X,
 } from 'lucide-react';
 import { GoogleMapWrapper, LocationPoint, StopPoint } from '../maps/GoogleMapWrapper.tsx';
+import { ServiceAreaAlert } from './ServiceAreaAlert.tsx';
 import { calculateDistanceKm, estimateDurationMinutes, calculateFare, FARE_CONFIG } from '../../lib/fare.ts';
 import { VehicleType, RideWithStops, RouteSource, PromoCode } from '../../types/index.ts';
 import { isWithinServiceArea } from '../../utils/serviceArea.ts';
@@ -118,7 +119,13 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
   const [confirmedRide, setConfirmedRide] = useState<RideWithStops | null>(null);
 
   // Scheduling Option
-  const [isScheduled, setIsScheduled] = useState<boolean>(false);
+  const [isScheduled, setIsScheduled] = useState<boolean>(() => {
+    try {
+      return sessionStorage.getItem('booking_mode') === 'scheduled';
+    } catch {
+      return false;
+    }
+  });
   const [scheduledDate, setScheduledDate] = useState<string>(() => {
     const d = new Date();
     d.setDate(d.getDate() + 1);
@@ -584,6 +591,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
     setPromoDiscount(0);
     setPromoMessage(null);
     setIsScheduled(false);
+    sessionStorage.removeItem('booking_mode');
   };
 
   // Calculated fare details
@@ -647,10 +655,14 @@ export const BookingPage: React.FC<BookingPageProps> = ({ onNavigate, onRideBook
 
           {/* Booking Error Notice */}
           {bookingError && (
-            <div className="rounded-lg border border-[#B91C1C]/30 bg-[#B91C1C]/10 p-3 text-xs text-[#B91C1C] flex items-start gap-2">
-              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-              <span>{bookingError}</span>
-            </div>
+            bookingError.includes('outside our current service area') ? (
+              <ServiceAreaAlert message={bookingError} />
+            ) : (
+              <div className="rounded-lg border border-[#B91C1C]/30 bg-[#B91C1C]/10 p-3 text-xs text-[#B91C1C] flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>{bookingError}</span>
+              </div>
+            )
           )}
 
           {/* Waypoints Input Sequence */}

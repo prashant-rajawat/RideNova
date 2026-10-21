@@ -72,8 +72,7 @@ const SERVICES: ServiceItem[] = [
     subtitle: 'Plan ahead',
     imageUrl: 'https://i.ibb.co/bRqCjtqH/image.png',
     fallbackImageUrl: '/assets/services/reserve.png',
-    badge: 'Soon',
-    isAvailable: false,
+    isAvailable: true,
     tagline: 'Scheduled Advance Bookings',
     description: 'Schedule your ride up to 90 days in advance with guaranteed driver assignment and extra wait time.',
     features: ['Book up to 90 days early', 'Guaranteed driver arrival', 'Complimentary wait time'],
@@ -165,7 +164,11 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({
   const handleServiceClick = (item: ServiceItem) => {
     if (item.id === 'package') {
       onNavigate('book-parcel');
+    } else if (item.id === 'reserve') {
+      sessionStorage.setItem('booking_mode', 'scheduled');
+      onNavigate('book-ride');
     } else if (item.isAvailable) {
+      sessionStorage.removeItem('booking_mode');
       onNavigate('book-ride');
     } else {
       setSelectedService(item);
